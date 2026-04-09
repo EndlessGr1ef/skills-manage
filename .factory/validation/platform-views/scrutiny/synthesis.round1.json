@@ -1,7 +1,7 @@
 {
   "milestone": "platform-views",
-  "round": 2,
-  "status": "pass",
+  "round": 1,
+  "status": "fail",
   "validatorsRun": {
     "test": {
       "passed": true,
@@ -30,21 +30,29 @@
     }
   },
   "reviewsSummary": {
-    "total": 1,
+    "total": 2,
     "passed": 1,
-    "failed": 0,
-    "failedFeatures": []
+    "failed": 1,
+    "failedFeatures": [
+      "central-skills-view"
+    ]
   },
-  "blockingIssues": [],
+  "blockingIssues": [
+    {
+      "featureId": "central-skills-view",
+      "severity": "blocking",
+      "description": "The Central Skills install dialog offers a Copy method, but the selected install method is never passed through the frontend store or Rust command layer, so every install still uses the symlink-only path."
+    }
+  ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skills",
       "suggestion": "Update the scrutiny review/validator procedure so Task-spawned `scrutiny-feature-reviewer` subagents can run with automatic execution approval in this worker environment, or provide a documented fallback path when they cannot.",
-      "evidence": "In this re-run, the Task invocation for `fix-copy-install-mode` again exited immediately with `Exec ended early: insufficient permission to proceed`, so the validator had to perform the fix review manually after checking the review target's handoff and code changes. The same failure mode was already recorded in platform-views round 1 and foundation scrutiny round 2.",
+      "evidence": "In this validation run, both Task invocations for `platform-view-page` and `central-skills-view` exited immediately with `Exec ended early: insufficient permission to proceed`, so the validator had to perform the reviews manually. The same failure mode was already recorded in foundation scrutiny round 2.",
       "isSystemic": true
     }
   ],
   "rejectedObservations": [],
-  "previousRound": ".factory/validation/platform-views/scrutiny/synthesis.round1.json"
+  "previousRound": null
 }
