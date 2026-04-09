@@ -27,6 +27,7 @@ const mockDetail: SkillDetail = {
       installed_path: "~/.claude/skills/frontend-design",
       link_type: "symlink",
       symlink_target: "~/.agents/skills/frontend-design",
+      installed_at: "2026-04-09T12:00:00Z",
     },
   ],
 };
@@ -43,6 +44,7 @@ const mockDetailAfterInstall: SkillDetail = {
       installed_path: "~/.cursor/skills/frontend-design",
       link_type: "symlink",
       symlink_target: "~/.agents/skills/frontend-design",
+      installed_at: "2026-04-09T12:05:00Z",
     },
   ],
 };

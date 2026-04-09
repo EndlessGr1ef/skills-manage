@@ -213,7 +213,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                 is_central,
                 source: Some(skill.link_type.clone()),
                 content: None,
-                scanned_at: now,
+                scanned_at: now.clone(),
             };
             db::upsert_skill(pool, &db_skill).await?;
 
@@ -224,6 +224,7 @@ pub async fn scan_all_skills_impl(pool: &DbPool) -> Result<ScanResult, String> {
                 installed_path: skill.dir_path.clone(),
                 link_type: skill.link_type.clone(),
                 symlink_target: skill.symlink_target.clone(),
+                created_at: now.clone(),
             };
             db::upsert_skill_installation(pool, &installation).await?;
         }

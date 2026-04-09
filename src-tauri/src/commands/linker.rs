@@ -205,6 +205,7 @@ pub async fn install_skill_to_agent_impl(
         installed_path: symlink_path.to_string_lossy().into_owned(),
         link_type: "symlink".to_string(),
         symlink_target: Some(canonical_dir.to_string_lossy().into_owned()),
+        created_at: chrono::Utc::now().to_rfc3339(),
     };
     db::upsert_skill_installation(pool, &installation).await?;
 
@@ -289,6 +290,7 @@ pub async fn install_skill_to_agent_copy_impl(
         installed_path: target_path.to_string_lossy().into_owned(),
         link_type: "copy".to_string(),
         symlink_target: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
     };
     db::upsert_skill_installation(pool, &installation).await?;
 
@@ -780,6 +782,7 @@ mod tests {
             installed_path: agent_dir.join("ghost-skill").to_string_lossy().into_owned(),
             link_type: "symlink".to_string(),
             symlink_target: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
         };
         db::upsert_skill_installation(&pool, &installation).await.unwrap();
 

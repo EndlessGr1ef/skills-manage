@@ -58,6 +58,8 @@ export interface SkillInstallation {
   installed_path: string;
   link_type: string;
   symlink_target?: string;
+  /** ISO 8601 timestamp of when the skill was first installed. */
+  installed_at?: string;
 }
 
 export interface SkillDetail extends Omit<Skill, "content"> {

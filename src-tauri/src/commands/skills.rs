@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::db::{self, DbPool, SkillForAgent, SkillInstallation};
+use crate::db::{self, DbPool, SkillForAgent};
 use crate::AppState;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,6 +22,21 @@ pub struct SkillWithLinks {
     pub linked_agents: Vec<String>,
 }
 
+/// An installation record enriched with the `installed_at` timestamp for
+/// the skill detail IPC response. This is the frontend-facing version of
+/// `db::SkillInstallation` — `created_at` from the DB is exposed as
+/// `installed_at` for clarity.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillInstallationDetail {
+    pub skill_id: String,
+    pub agent_id: String,
+    pub installed_path: String,
+    pub link_type: String,
+    pub symlink_target: Option<String>,
+    /// ISO 8601 timestamp of when the skill was first installed.
+    pub installed_at: String,
+}
+
 /// A skill with full installation details across all platforms.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillDetail {
@@ -34,7 +49,7 @@ pub struct SkillDetail {
     pub source: Option<String>,
     pub scanned_at: String,
     /// All installation records for this skill across agents.
-    pub installations: Vec<SkillInstallation>,
+    pub installations: Vec<SkillInstallationDetail>,
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -97,7 +112,8 @@ pub async fn get_central_skills(
 }
 
 /// Tauri command: return detailed information about a skill, including all
-/// installation records across agents.
+/// installation records across agents. Each installation includes `installed_at`
+/// (the `created_at` timestamp from the DB, renamed for frontend clarity).
 #[tauri::command]
 pub async fn get_skill_detail(
     state: State<'_, AppState>,
@@ -108,6 +124,17 @@ pub async fn get_skill_detail(
         .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
 
     let installations = db::get_skill_installations(&state.db, &skill_id).await?;
+    let installations: Vec<SkillInstallationDetail> = installations
+        .into_iter()
+        .map(|i| SkillInstallationDetail {
+            skill_id: i.skill_id,
+            agent_id: i.agent_id,
+            installed_path: i.installed_path,
+            link_type: i.link_type,
+            symlink_target: i.symlink_target,
+            installed_at: i.created_at,
+        })
+        .collect();
 
     Ok(SkillDetail {
         id: skill.id,
@@ -194,6 +221,7 @@ mod tests {
                 installed_path: "/tmp/claude/skill-a/SKILL.md".to_string(),
                 link_type: "symlink".to_string(),
                 symlink_target: Some("/tmp/central/skill-a".to_string()),
+                created_at: Utc::now().to_rfc3339(),
             },
         )
         .await
@@ -232,6 +260,7 @@ mod tests {
                     installed_path: format!("/tmp/{}/central-a/SKILL.md", agent_id),
                     link_type: "symlink".to_string(),
                     symlink_target: Some("/tmp/central/central-a".to_string()),
+                    created_at: Utc::now().to_rfc3339(),
                 },
             )
             .await
@@ -284,6 +313,7 @@ mod tests {
         let skill = make_skill("detail-skill", "Detail Skill", false);
         db::upsert_skill(&pool, &skill).await.unwrap();
 
+        let now = Utc::now().to_rfc3339();
         db::upsert_skill_installation(
             &pool,
             &SkillInstallation {
@@ -292,6 +322,7 @@ mod tests {
                 installed_path: "/tmp/claude/detail-skill/SKILL.md".to_string(),
                 link_type: "copy".to_string(),
                 symlink_target: None,
+                created_at: now.clone(),
             },
         )
         .await
@@ -301,6 +332,8 @@ mod tests {
         assert_eq!(detail.id, "detail-skill");
         assert_eq!(detail.installations.len(), 1);
         assert_eq!(detail.installations[0].agent_id, "claude-code");
+        // installed_at should be populated from created_at
+        assert!(!detail.installations[0].installed_at.is_empty(), "installed_at must be set");
     }
 
     #[tokio::test]
@@ -393,6 +426,17 @@ mod tests {
             .await?
             .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
         let installations = db::get_skill_installations(pool, skill_id).await?;
+        let installations: Vec<SkillInstallationDetail> = installations
+            .into_iter()
+            .map(|i| SkillInstallationDetail {
+                skill_id: i.skill_id,
+                agent_id: i.agent_id,
+                installed_path: i.installed_path,
+                link_type: i.link_type,
+                symlink_target: i.symlink_target,
+                installed_at: i.created_at,
+            })
+            .collect();
         Ok(SkillDetail {
             id: skill.id,
             name: skill.name,
@@ -435,6 +479,7 @@ mod tests {
                 installed_path: "/tmp/claude/meta-skill".to_string(),
                 link_type: "symlink".to_string(),
                 symlink_target: Some("/tmp/central/meta-skill".to_string()),
+                created_at: Utc::now().to_rfc3339(),
             },
         )
         .await
@@ -479,6 +524,7 @@ mod tests {
                 installed_path: "/tmp/cursor/copy-skill".to_string(),
                 link_type: "copy".to_string(),
                 symlink_target: None,
+                created_at: Utc::now().to_rfc3339(),
             },
         )
         .await

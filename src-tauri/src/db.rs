@@ -31,6 +31,8 @@ pub struct SkillInstallation {
     pub installed_path: String,
     pub link_type: String,
     pub symlink_target: Option<String>,
+    /// ISO 8601 timestamp of when the skill was first installed.
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -117,6 +119,7 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
             installed_path TEXT NOT NULL,
             link_type      TEXT NOT NULL,
             symlink_target TEXT,
+            created_at     TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (skill_id, agent_id)
         )",
     )
@@ -481,21 +484,31 @@ pub async fn delete_skill(pool: &DbPool, skill_id: &str) -> Result<(), String> {
 
 // ─── Skill Installations ──────────────────────────────────────────────────────
 
-/// Insert or replace a skill installation record.
+/// Insert or update a skill installation record.
+///
+/// On conflict (same skill_id + agent_id), updates the mutable fields
+/// (installed_path, link_type, symlink_target) but **preserves the original
+/// `created_at`** so the installation timestamp reflects when the skill was
+/// first installed, not when it was last re-scanned.
 pub async fn upsert_skill_installation(
     pool: &DbPool,
     installation: &SkillInstallation,
 ) -> Result<(), String> {
     sqlx::query(
-        "INSERT OR REPLACE INTO skill_installations
-         (skill_id, agent_id, installed_path, link_type, symlink_target)
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO skill_installations
+         (skill_id, agent_id, installed_path, link_type, symlink_target, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(skill_id, agent_id) DO UPDATE SET
+           installed_path = excluded.installed_path,
+           link_type      = excluded.link_type,
+           symlink_target = excluded.symlink_target",
     )
     .bind(&installation.skill_id)
     .bind(&installation.agent_id)
     .bind(&installation.installed_path)
     .bind(&installation.link_type)
     .bind(&installation.symlink_target)
+    .bind(&installation.created_at)
     .execute(pool)
     .await
     .map(|_| ())
@@ -1115,6 +1128,7 @@ mod tests {
             } else {
                 None
             },
+            created_at: Utc::now().to_rfc3339(),
         }
     }
 

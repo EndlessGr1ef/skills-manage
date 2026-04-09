@@ -79,12 +79,22 @@ function PlatformInstallRow({
         )}
       </div>
 
-      {/* Platform name + path */}
+      {/* Platform name + path + install timestamp */}
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium">{agent.display_name}</div>
         {isInstalled && installation?.installed_path && (
           <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
             {installation.installed_path}
+          </div>
+        )}
+        {isInstalled && installation?.installed_at && (
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Installed{" "}
+            {new Date(installation.installed_at).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
           </div>
         )}
         {!isInstalled && (
