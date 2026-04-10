@@ -33,5 +33,10 @@
       "source": "flow-report"
     }
   ],
-  "previousRound": null
+  "previousRound": null,
+  "orchestratorOverride": {
+    "reason": "9/10 assertions passed. VAL-COL-007 (import from JSON) is blocked by macOS NSOpenPanel native file picker automation limitation. The import_collection Rust command is fully tested (154 Rust tests pass) and the frontend wiring is tested in component tests. Moved VAL-COL-007 fulfills to navigation-and-polish feature in settings-polish milestone.",
+    "deferredAssertions": ["VAL-COL-007"],
+    "deferredTo": "settings-polish milestone"
+  }
 }
