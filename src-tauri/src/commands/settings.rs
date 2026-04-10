@@ -30,6 +30,15 @@ pub async fn remove_scan_directory_impl(pool: &DbPool, path: &str) -> Result<(),
     db::remove_scan_directory(pool, path).await
 }
 
+/// Toggle the `is_active` flag on a scan directory by path.
+pub async fn set_scan_directory_active_impl(
+    pool: &DbPool,
+    path: &str,
+    is_active: bool,
+) -> Result<(), String> {
+    db::toggle_scan_directory(pool, path, is_active).await
+}
+
 /// Get a settings value by key. Returns `None` if the key is not set.
 pub async fn get_setting_impl(pool: &DbPool, key: &str) -> Result<Option<String>, String> {
     db::get_setting(pool, key).await
@@ -70,6 +79,16 @@ pub async fn remove_scan_directory(
     path: String,
 ) -> Result<(), String> {
     remove_scan_directory_impl(&state.db, &path).await
+}
+
+/// Tauri command: set the is_active flag on a scan directory.
+#[tauri::command]
+pub async fn set_scan_directory_active(
+    state: State<'_, AppState>,
+    path: String,
+    is_active: bool,
+) -> Result<(), String> {
+    set_scan_directory_active_impl(&state.db, &path, is_active).await
 }
 
 /// Tauri command: get a settings value by key.
@@ -198,6 +217,31 @@ mod tests {
 
         let result = remove_scan_directory_impl(&pool, "/builtin/path").await;
         assert!(result.is_err(), "Removing a built-in directory should fail");
+    }
+
+    // ── set_scan_directory_active_impl ────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_set_scan_directory_active_disables() {
+        let pool = setup_test_db().await;
+        add_scan_directory_impl(&pool, "/tmp/toggle-me", None).await.unwrap();
+        set_scan_directory_active_impl(&pool, "/tmp/toggle-me", false).await.unwrap();
+        let dirs = get_scan_directories_impl(&pool).await.unwrap();
+        let dir = dirs.iter().find(|d| d.path == "/tmp/toggle-me").unwrap();
+        assert!(!dir.is_active, "Directory should be inactive");
+    }
+
+    #[tokio::test]
+    async fn test_set_scan_directory_active_enables() {
+        let pool = setup_test_db().await;
+        add_scan_directory_impl(&pool, "/tmp/re-enable-me", None).await.unwrap();
+        // First disable
+        set_scan_directory_active_impl(&pool, "/tmp/re-enable-me", false).await.unwrap();
+        // Then re-enable
+        set_scan_directory_active_impl(&pool, "/tmp/re-enable-me", true).await.unwrap();
+        let dirs = get_scan_directories_impl(&pool).await.unwrap();
+        let dir = dirs.iter().find(|d| d.path == "/tmp/re-enable-me").unwrap();
+        assert!(dir.is_active, "Directory should be active again");
     }
 
     // ── get_setting_impl ──────────────────────────────────────────────────────

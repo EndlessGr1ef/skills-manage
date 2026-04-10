@@ -1,4 +1,5 @@
 import { Check, X, PackagePlus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AgentWithStatus, SkillWithLinks } from "@/types";
@@ -46,18 +47,24 @@ export function CentralSkillCard({
   onInstallClick,
   className,
 }: CentralSkillCardProps) {
+  const navigate = useNavigate();
   // Only show non-central agents for link status.
   const targetAgents = agents.filter((a) => a.id !== "central");
 
   return (
     <Card size="sm" className={cn("", className)}>
       <CardContent className="space-y-3">
-        {/* Header row: name + install button */}
+        {/* Header row: name + action buttons */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-0.5">
-            <div className="font-medium text-sm text-foreground truncate">
+            {/* Clickable skill name navigates to detail page */}
+            <button
+              className="font-medium text-sm text-foreground truncate hover:text-primary hover:underline text-left w-full"
+              onClick={() => navigate(`/skill/${skill.id}`)}
+              aria-label={`View details for ${skill.name}`}
+            >
               {skill.name}
-            </div>
+            </button>
             {skill.description && (
               <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                 {skill.description}
@@ -65,17 +72,30 @@ export function CentralSkillCard({
             )}
           </div>
 
-          {/* Install to... button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onInstallClick(skill)}
-            className="shrink-0"
-            aria-label={`Install ${skill.name} to platforms`}
-          >
-            <PackagePlus className="size-3.5" />
-            <span>Install to...</span>
-          </Button>
+          {/* Action buttons */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Detail [详情] button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(`/skill/${skill.id}`)}
+              className="text-xs text-muted-foreground"
+              aria-label={`View details for ${skill.name}`}
+            >
+              [详情]
+            </Button>
+
+            {/* Install to... button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onInstallClick(skill)}
+              aria-label={`Install ${skill.name} to platforms`}
+            >
+              <PackagePlus className="size-3.5" />
+              <span>Install to...</span>
+            </Button>
+          </div>
         </div>
 
         {/* Per-platform link status */}

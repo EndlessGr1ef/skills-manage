@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
@@ -226,16 +227,24 @@ export function SkillDetail() {
 
   async function handleInstall(agentId: string) {
     if (!skillId) return;
-    await installSkill(skillId, agentId);
-    // Refresh sidebar counts in background
-    rescan();
+    try {
+      await installSkill(skillId, agentId);
+      // Refresh sidebar counts in background
+      rescan();
+    } catch (err) {
+      toast.error(`安装失败: ${String(err)}`);
+    }
   }
 
   async function handleUninstall(agentId: string) {
     if (!skillId) return;
-    await uninstallSkill(skillId, agentId);
-    // Refresh sidebar counts in background
-    rescan();
+    try {
+      await uninstallSkill(skillId, agentId);
+      // Refresh sidebar counts in background
+      rescan();
+    } catch (err) {
+      toast.error(`卸载失败: ${String(err)}`);
+    }
   }
 
   function handleCollectionAdded() {

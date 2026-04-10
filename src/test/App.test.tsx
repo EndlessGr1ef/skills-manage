@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import App from "../App";
 
@@ -48,23 +48,46 @@ vi.mock("../stores/collectionStore", () => ({
   }),
 }));
 
+// Mock centralSkillsStore to prevent async state updates that cause act() warnings
+vi.mock("../stores/centralSkillsStore", () => ({
+  useCentralSkillsStore: vi.fn().mockImplementation((selector?: unknown) => {
+    const state = {
+      skills: [],
+      agents: [],
+      isLoading: false,
+      isInstalling: false,
+      error: null,
+      loadCentralSkills: vi.fn().mockResolvedValue(undefined),
+      installSkill: vi.fn(),
+    };
+    if (typeof selector === "function") {
+      return selector(state);
+    }
+    return state;
+  }),
+}));
+
 describe("App", () => {
-  it("renders the app shell with sidebar", () => {
-    render(
-      <MemoryRouter initialEntries={["/central"]}>
-        <App />
-      </MemoryRouter>
-    );
+  it("renders the app shell with sidebar", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/central"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
     // Sidebar header is visible
     expect(screen.getByText("skills-manage")).toBeInTheDocument();
   });
 
-  it("renders sidebar navigation sections", () => {
-    render(
-      <MemoryRouter initialEntries={["/central"]}>
-        <App />
-      </MemoryRouter>
-    );
+  it("renders sidebar navigation sections", async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/central"]}>
+          <App />
+        </MemoryRouter>
+      );
+    });
     expect(screen.getByText("By Tool")).toBeInTheDocument();
     // "Central Skills" appears in both the sidebar nav button and the main content header
     expect(screen.getAllByText("Central Skills").length).toBeGreaterThanOrEqual(1);

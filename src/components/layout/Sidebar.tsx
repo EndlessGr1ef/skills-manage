@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Settings, Plus, Loader2, Upload } from "lucide-react";
+import {
+  Settings,
+  Plus,
+  Loader2,
+  Upload,
+  Monitor,
+  PackageOpen,
+  Folder,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCollectionStore } from "@/stores/collectionStore";
 import { CollectionEditor } from "@/components/collection/CollectionEditor";
 import { cn } from "@/lib/utils";
+
+// Auto-collapse threshold in pixels
+const COLLAPSE_THRESHOLD = 1024;
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
 
@@ -37,13 +50,34 @@ function NavItem({
   isActive,
   onClick,
   badgeVariant = "muted",
+  icon,
+  collapsed = false,
 }: {
   label: string;
   badge?: number;
   isActive: boolean;
   onClick: () => void;
   badgeVariant?: "muted" | "primary";
+  icon?: React.ReactNode;
+  collapsed?: boolean;
 }) {
+  if (collapsed && icon) {
+    return (
+      <button
+        onClick={onClick}
+        title={label}
+        aria-label={label}
+        className={cn(
+          "flex items-center justify-center w-full py-2 rounded-md transition-colors",
+          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          isActive && "bg-sidebar-accent text-sidebar-accent-foreground"
+        )}
+      >
+        {icon}
+      </button>
+    );
+  }
+
   return (
     <button
       onClick={onClick}
@@ -55,6 +89,7 @@ function NavItem({
       )}
       style={{ width: "calc(100% - 0.5rem)" }}
     >
+      {icon && <span className="mr-2 shrink-0">{icon}</span>}
       <span className="truncate">{label}</span>
       {badge !== undefined && (
         <Badge count={badge} variant={badgeVariant} />
@@ -68,10 +103,14 @@ function NavItem({
 function SectionHeader({
   label,
   action,
+  collapsed = false,
 }: {
   label: string;
   action?: React.ReactNode;
+  collapsed?: boolean;
 }) {
+  if (collapsed) return null;
+
   return (
     <div className="flex items-center justify-between px-3 py-1.5">
       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -94,12 +133,26 @@ export function Sidebar() {
   const importCollection = useCollectionStore((s) => s.importCollection);
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  // Start expanded; auto-collapse is applied after mount via resize listener
+  const [collapsed, setCollapsed] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // Load collections on mount.
   useEffect(() => {
     loadCollections();
   }, [loadCollections]);
+
+  // Auto-collapse when window is narrow.
+  useEffect(() => {
+    // Initial check after mount
+    setCollapsed(window.innerWidth < COLLAPSE_THRESHOLD);
+
+    function handleResize() {
+      setCollapsed(window.innerWidth < COLLAPSE_THRESHOLD);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Separate platform agents from the central one.
   const platformAgents = agents.filter(
@@ -128,110 +181,182 @@ export function Sidebar() {
     }
   }
 
+  // Check if we're on a collection route
+  const isCollectionActive = pathname.startsWith("/collection/");
+
   return (
     <nav
-      className="flex flex-col w-60 shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground"
+      className={cn(
+        "flex flex-col shrink-0 h-full border-r border-border bg-sidebar text-sidebar-foreground transition-all duration-200",
+        collapsed ? "w-14" : "w-60"
+      )}
       aria-label="Main navigation"
+      data-collapsed={collapsed}
     >
       {/* App header */}
-      <div className="px-4 py-3 border-b border-border">
-        <h1 className="text-sm font-semibold tracking-tight">skills-manage</h1>
+      <div
+        className={cn(
+          "border-b border-border flex items-center",
+          collapsed ? "px-2 py-3 justify-center" : "px-4 py-3 justify-between"
+        )}
+      >
+        {!collapsed && (
+          <h1 className="text-sm font-semibold tracking-tight">skills-manage</h1>
+        )}
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="size-4" />
+          ) : (
+            <ChevronLeft className="size-4" />
+          )}
+        </button>
       </div>
 
       {/* Scrollable sections */}
       <div className="flex-1 overflow-y-auto py-3 space-y-4">
         {/* ── By Tool ─────────────────────────────────────────── */}
         <section aria-label="By Tool">
-          <SectionHeader label="By Tool" />
+          <SectionHeader label="By Tool" collapsed={collapsed} />
           {isLoading ? (
-            <div className="flex items-center gap-2 px-3 py-2 text-muted-foreground text-sm">
+            <div className={cn(
+              "flex items-center py-2 text-muted-foreground text-sm",
+              collapsed ? "justify-center px-1" : "gap-2 px-3"
+            )}>
               <Loader2 className="size-3.5 animate-spin" />
-              <span>Scanning...</span>
+              {!collapsed && <span>Scanning...</span>}
             </div>
           ) : platformAgents.length === 0 ? (
-            <p className="px-3 py-1.5 text-xs text-muted-foreground">
-              No platforms detected
-            </p>
+            !collapsed && (
+              <p className="px-3 py-1.5 text-xs text-muted-foreground">
+                No platforms detected
+              </p>
+            )
           ) : (
-            platformAgents.map((agent) => (
-              <NavItem
-                key={agent.id}
-                label={agent.display_name}
-                badge={skillsByAgent[agent.id] ?? 0}
-                isActive={pathname === `/platform/${agent.id}`}
-                onClick={() => navigate(`/platform/${agent.id}`)}
-              />
-            ))
+            <div className={cn(collapsed ? "px-1 space-y-0.5" : "")}>
+              {platformAgents.map((agent) => (
+                <NavItem
+                  key={agent.id}
+                  label={agent.display_name}
+                  badge={!collapsed ? (skillsByAgent[agent.id] ?? 0) : undefined}
+                  isActive={pathname === `/platform/${agent.id}`}
+                  onClick={() => navigate(`/platform/${agent.id}`)}
+                  icon={<Monitor className="size-4" />}
+                  collapsed={collapsed}
+                />
+              ))}
+            </div>
           )}
         </section>
 
         {/* ── Central Skills ───────────────────────────────────── */}
         <section aria-label="Central Skills">
-          <NavItem
-            label="Central Skills"
-            badge={isLoading ? undefined : centralCount}
-            isActive={pathname === "/central"}
-            onClick={() => navigate("/central")}
-            badgeVariant="primary"
-          />
+          {collapsed ? (
+            <div className="px-1">
+              <NavItem
+                label="Central Skills"
+                isActive={pathname === "/central"}
+                onClick={() => navigate("/central")}
+                icon={<PackageOpen className="size-4" />}
+                collapsed={collapsed}
+              />
+            </div>
+          ) : (
+            <NavItem
+              label="Central Skills"
+              badge={isLoading ? undefined : centralCount}
+              isActive={pathname === "/central"}
+              onClick={() => navigate("/central")}
+              badgeVariant="primary"
+            />
+          )}
         </section>
 
         {/* ── Collections ──────────────────────────────────────── */}
         <section aria-label="Collections">
           <SectionHeader
             label="Collections"
+            collapsed={collapsed}
             action={
-              <div className="flex items-center gap-0.5">
-                {/* Import button */}
-                <button
-                  className="p-0.5 rounded hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-accent-foreground transition-colors"
-                  onClick={handleImportClick}
-                  aria-label="Import Collection from JSON"
-                  title="Import Collection"
-                >
-                  <Upload className="size-3.5" />
-                </button>
-                {/* Create new collection button */}
-                <button
-                  className="p-0.5 rounded hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-accent-foreground transition-colors"
-                  onClick={() => setIsEditorOpen(true)}
-                  aria-label="新建 Collection"
-                  title="新建 Collection"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
+              !collapsed ? (
+                <div className="flex items-center gap-0.5">
+                  {/* Import button */}
+                  <button
+                    className="p-0.5 rounded hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-accent-foreground transition-colors"
+                    onClick={handleImportClick}
+                    aria-label="Import Collection from JSON"
+                    title="Import Collection"
+                  >
+                    <Upload className="size-3.5" />
+                  </button>
+                  {/* Create new collection button */}
+                  <button
+                    className="p-0.5 rounded hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-accent-foreground transition-colors"
+                    onClick={() => setIsEditorOpen(true)}
+                    aria-label="新建 Collection"
+                    title="新建 Collection"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                </div>
+              ) : undefined
             }
           />
 
-          {/* Collection list */}
-          {collections.length === 0 ? (
-            <div className="px-3 py-1">
-              <button
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setIsEditorOpen(true)}
-              >
-                + 新建
-              </button>
+          {collapsed ? (
+            /* Collapsed: show a single collections icon */
+            <div className="px-1">
+              <NavItem
+                label="Collections"
+                isActive={isCollectionActive}
+                onClick={() => {
+                  if (collections.length > 0) {
+                    navigate(`/collection/${collections[0].id}`);
+                  } else {
+                    setIsEditorOpen(true);
+                  }
+                }}
+                icon={<Folder className="size-4" />}
+                collapsed={collapsed}
+              />
             </div>
           ) : (
+            /* Expanded: show full collection list */
             <>
-              {collections.map((col) => (
-                <NavItem
-                  key={col.id}
-                  label={col.name}
-                  isActive={pathname === `/collection/${col.id}`}
-                  onClick={() => navigate(`/collection/${col.id}`)}
-                />
-              ))}
-              <div className="px-3 py-1">
-                <button
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setIsEditorOpen(true)}
-                >
-                  + 新建
-                </button>
-              </div>
+              {collections.length === 0 ? (
+                <div className="px-3 py-1">
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => setIsEditorOpen(true)}
+                  >
+                    + 新建
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {collections.map((col) => (
+                    <NavItem
+                      key={col.id}
+                      label={col.name}
+                      isActive={pathname === `/collection/${col.id}`}
+                      onClick={() => navigate(`/collection/${col.id}`)}
+                    />
+                  ))}
+                  <div className="px-3 py-1">
+                    <button
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setIsEditorOpen(true)}
+                    >
+                      + 新建
+                    </button>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -252,14 +377,17 @@ export function Sidebar() {
         <button
           onClick={() => navigate("/settings")}
           className={cn(
-            "flex items-center gap-2 w-full px-3 py-1.5 text-sm rounded-md transition-colors",
+            "flex items-center w-full rounded-md transition-colors text-sm",
             "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             pathname === "/settings" &&
-              "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+              "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+            collapsed ? "justify-center py-2" : "gap-2 px-3 py-1.5"
           )}
+          title={collapsed ? "设置" : undefined}
+          aria-label="设置"
         >
           <Settings className="size-4" />
-          <span>设置</span>
+          {!collapsed && <span>设置</span>}
         </button>
       </div>
 

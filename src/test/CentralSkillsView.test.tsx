@@ -175,6 +175,22 @@ describe("CentralSkillsView", () => {
     expect(installButtons).toHaveLength(2);
   });
 
+  it("shows [详情] detail button for each skill", () => {
+    renderCentralSkillsView();
+    const detailButtons = screen.getAllByText("[详情]");
+    expect(detailButtons).toHaveLength(2);
+  });
+
+  it("skill name is a clickable button for detail navigation", () => {
+    renderCentralSkillsView();
+    // Both the skill name and the [详情] button have aria-label "View details for ..."
+    const detailBtns = screen.getAllByRole("button", {
+      name: /View details for frontend-design/i,
+    });
+    // Should find at least one (the skill name button)
+    expect(detailBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
   // ── Per-platform link status ──────────────────────────────────────────────
 
   it("shows link status icons for each non-central agent", () => {
@@ -186,7 +202,7 @@ describe("CentralSkillsView", () => {
 
   // ── Empty State ───────────────────────────────────────────────────────────
 
-  it("shows empty state when no skills exist", () => {
+  it("shows first-visit empty state when no skills exist", () => {
     vi.mocked(useCentralSkillsStore).mockImplementation((selector?: unknown) => {
       const state = buildCentralStoreState({ skills: [] });
       if (typeof selector === "function") return selector(state);
@@ -200,7 +216,11 @@ describe("CentralSkillsView", () => {
     );
 
     expect(
-      screen.getByText(/No skills in Central Skills/)
+      screen.getByText(/Welcome to skills-manage/)
+    ).toBeInTheDocument();
+    // Should show guidance about creating a skill
+    expect(
+      screen.getByText(/No skills found in/)
     ).toBeInTheDocument();
   });
 

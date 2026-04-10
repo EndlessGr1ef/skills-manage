@@ -13,7 +13,7 @@ interface SettingsState {
   loadScanDirectories: () => Promise<void>;
   addScanDirectory: (path: string, label?: string) => Promise<ScanDirectory>;
   removeScanDirectory: (path: string) => Promise<void>;
-  toggleScanDirectory: (path: string, active: boolean) => void;
+  toggleScanDirectory: (path: string, active: boolean) => Promise<void>;
 
   // Actions — custom agents
   addCustomAgent: (config: CustomAgentConfig) => Promise<AgentWithStatus>;
@@ -72,10 +72,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   },
 
   /**
-   * Toggle the active state of a custom scan directory (local state only;
-   * the backend does not yet expose a toggle command).
+   * Toggle the active state of a custom scan directory.
+   * Persists the change to the backend database.
    */
-  toggleScanDirectory: (path: string, active: boolean) => {
+  toggleScanDirectory: async (path: string, active: boolean) => {
+    await invoke<void>("set_scan_directory_active", { path, isActive: active });
     set((state) => ({
       scanDirectories: state.scanDirectories.map((d) =>
         d.path === path ? { ...d, is_active: active } : d

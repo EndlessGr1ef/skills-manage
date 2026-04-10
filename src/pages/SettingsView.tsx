@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, Loader2, FolderOpen, Cpu, Info, Database } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -168,8 +169,10 @@ export function SettingsView() {
       await addScanDirectory(path);
       // Trigger rescan after adding a directory.
       await rescan();
+      toast.success("目录已添加");
     } catch (err) {
       setScanDirError(String(err));
+      toast.error(`添加目录失败: ${String(err)}`);
       throw err; // Re-throw so the dialog knows it failed
     }
   }
@@ -181,20 +184,27 @@ export function SettingsView() {
       await removeScanDirectory(path);
       // Trigger rescan after removing a directory.
       await rescan();
+      toast.success("目录已删除");
     } catch (err) {
       setScanDirError(String(err));
+      toast.error(`删除目录失败: ${String(err)}`);
     } finally {
       setRemovingDir(null);
     }
   }
 
   /**
-   * Toggle the active state of a custom scan directory (local UI state only).
-   * The backend does not yet have a toggle command, so this only updates
-   * the in-memory Zustand state.
+   * Toggle the active state of a custom scan directory.
+   * Persists the change to the backend via set_scan_directory_active command.
    */
-  function handleToggleDirectory(path: string, active: boolean) {
-    toggleScanDirectory(path, active);
+  async function handleToggleDirectory(path: string, active: boolean) {
+    setScanDirError(null);
+    try {
+      await toggleScanDirectory(path, active);
+    } catch (err) {
+      setScanDirError(String(err));
+      toast.error(`切换目录状态失败: ${String(err)}`);
+    }
   }
 
   // ── Custom Platform Handlers ───────────────────────────────────────────────
@@ -220,8 +230,10 @@ export function SettingsView() {
       });
       // Refresh agents + rescan to show new platform in sidebar.
       await rescan();
+      toast.success("平台已添加");
     } catch (err) {
       setPlatformError(String(err));
+      toast.error(`添加平台失败: ${String(err)}`);
       throw err;
     }
   }
@@ -236,8 +248,10 @@ export function SettingsView() {
       });
       // Refresh agents + rescan.
       await rescan();
+      toast.success("平台已更新");
     } catch (err) {
       setPlatformError(String(err));
+      toast.error(`更新平台失败: ${String(err)}`);
       throw err;
     }
   }
@@ -249,8 +263,10 @@ export function SettingsView() {
       await removeCustomAgent(agentId);
       // Refresh agents.
       await rescan();
+      toast.success("平台已删除");
     } catch (err) {
       setPlatformError(String(err));
+      toast.error(`删除平台失败: ${String(err)}`);
     } finally {
       setRemovingAgent(null);
     }

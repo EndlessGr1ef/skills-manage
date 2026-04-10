@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import {
   Pencil,
   Trash2,
@@ -84,7 +85,11 @@ export function CollectionView() {
 
   async function handleRemoveSkill(skillId: string) {
     if (!collectionId) return;
-    await removeSkillFromCollection(collectionId, skillId);
+    try {
+      await removeSkillFromCollection(collectionId, skillId);
+    } catch (err) {
+      toast.error(`移除 skill 失败: ${String(err)}`);
+    }
   }
 
   async function handleDelete() {
@@ -99,6 +104,7 @@ export function CollectionView() {
       navigate("/central");
     } catch (err) {
       setDeleteError(String(err));
+      toast.error(`删除 Collection 失败: ${String(err)}`);
     } finally {
       setIsDeleting(false);
     }
@@ -118,16 +124,20 @@ export function CollectionView() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      // Error is already set in the store.
+    } catch (err) {
+      toast.error(`导出失败: ${String(err)}`);
     }
   }
 
   async function handleAddSkills(skillIds: string[]) {
     if (!collectionId) return;
-    // Add skills sequentially.
-    for (const skillId of skillIds) {
-      await addSkillToCollection(collectionId, skillId);
+    try {
+      // Add skills sequentially.
+      for (const skillId of skillIds) {
+        await addSkillToCollection(collectionId, skillId);
+      }
+    } catch (err) {
+      toast.error(`添加 skill 失败: ${String(err)}`);
     }
   }
 

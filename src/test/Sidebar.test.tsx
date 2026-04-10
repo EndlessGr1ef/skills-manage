@@ -279,4 +279,29 @@ describe("Sidebar", () => {
     renderSidebar();
     expect(screen.getByRole("button", { name: /Import Collection/i })).toBeInTheDocument();
   });
+
+  // ── Collapse Toggle ───────────────────────────────────────────────────────
+
+  it("renders a collapse toggle button", () => {
+    renderSidebar();
+    expect(screen.getByRole("button", { name: /Collapse sidebar/i })).toBeInTheDocument();
+  });
+
+  it("collapses sidebar when toggle button is clicked", () => {
+    renderSidebar();
+    const toggleBtn = screen.getByRole("button", { name: /Collapse sidebar/i });
+    fireEvent.click(toggleBtn);
+    // After collapse, the expand button should appear
+    expect(screen.getByRole("button", { name: /Expand sidebar/i })).toBeInTheDocument();
+  });
+
+  it("expands sidebar when expand button is clicked after collapse", () => {
+    renderSidebar();
+    // Collapse
+    fireEvent.click(screen.getByRole("button", { name: /Collapse sidebar/i }));
+    // Expand again
+    fireEvent.click(screen.getByRole("button", { name: /Expand sidebar/i }));
+    // Should show collapse button again
+    expect(screen.getByRole("button", { name: /Collapse sidebar/i })).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, RefreshCw, PackageOpen } from "lucide-react";
+import { Search, RefreshCw, PackageOpen, FolderOpen, Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { useCentralSkillsStore } from "@/stores/centralSkillsStore";
 import { usePlatformStore } from "@/stores/platformStore";
@@ -16,6 +18,41 @@ function EmptyState({ message }: { message: string }) {
     <div className="flex flex-col items-center justify-center h-full gap-3 py-20 text-muted-foreground">
       <PackageOpen className="size-10 opacity-30" />
       <p className="text-sm">{message}</p>
+    </div>
+  );
+}
+
+// ─── First Visit Empty State ──────────────────────────────────────────────────
+
+function FirstVisitEmptyState() {
+  const navigate = useNavigate();
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-6 py-16 text-center px-8">
+      <PackageOpen className="size-14 opacity-20" />
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold text-foreground">Welcome to skills-manage!</h2>
+        <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
+          No skills found in <code className="bg-muted px-1 rounded text-xs">~/.agents/skills/</code>.
+          Get started by creating a SKILL.md file there, or add custom scan directories in Settings.
+        </p>
+      </div>
+      <div className="flex flex-col gap-3 items-center">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-4 py-3 max-w-xs text-left">
+          <FolderOpen className="size-4 shrink-0" />
+          <span>
+            Create a skill directory at <code className="font-mono">~/.agents/skills/my-skill/SKILL.md</code>
+          </span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate("/settings")}
+          className="gap-2"
+        >
+          <Settings className="size-4" />
+          Go to Settings
+        </Button>
+      </div>
     </div>
   );
 }
@@ -61,16 +98,28 @@ export function CentralSkillsView() {
   }
 
   async function handleInstall(skillId: string, agentIds: string[], method: string) {
-    await installSkill(skillId, agentIds, method);
-    // Refresh sidebar counts after install.
-    await rescan();
+    try {
+      const result = await installSkill(skillId, agentIds, method);
+      // Refresh sidebar counts after install.
+      await rescan();
+      if (result.failed.length > 0) {
+        const failedNames = result.failed.map((f) => f.agent_id).join(", ");
+        toast.error(`Install partially failed for: ${failedNames}`);
+      }
+    } catch (err) {
+      toast.error(`Install failed: ${String(err)}`);
+    }
   }
 
   async function handleRefresh() {
-    // Re-scan the filesystem first so new/removed skills are picked up,
-    // then reload central skills from the (now-updated) database.
-    await rescan();
-    await loadCentralSkills();
+    try {
+      // Re-scan the filesystem first so new/removed skills are picked up,
+      // then reload central skills from the (now-updated) database.
+      await rescan();
+      await loadCentralSkills();
+    } catch (err) {
+      toast.error(`Refresh failed: ${String(err)}`);
+    }
   }
 
   return (
@@ -113,7 +162,7 @@ export function CentralSkillsView() {
         {isLoading ? (
           <EmptyState message="Loading skills..." />
         ) : skills.length === 0 ? (
-          <EmptyState message="No skills in Central Skills (~/.agents/skills/)" />
+          <FirstVisitEmptyState />
         ) : filteredSkills.length === 0 ? (
           <EmptyState message={`No skills match "${searchQuery}"`} />
         ) : (

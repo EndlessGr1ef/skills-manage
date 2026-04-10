@@ -193,32 +193,48 @@ describe("settingsStore", () => {
 
   // ── toggleScanDirectory ───────────────────────────────────────────────────
 
-  it("toggleScanDirectory updates is_active in local state", () => {
+  it("toggleScanDirectory updates is_active in local state", async () => {
     useSettingsStore.setState({
       scanDirectories: [
         { ...mockCustomDir, is_active: true },
       ],
     });
 
-    useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
 
     const state = useSettingsStore.getState();
     expect(state.scanDirectories[0].is_active).toBe(false);
   });
 
-  it("toggleScanDirectory re-enables a disabled directory", () => {
+  it("toggleScanDirectory calls set_scan_directory_active command", async () => {
+    useSettingsStore.setState({
+      scanDirectories: [{ ...mockCustomDir, is_active: true }],
+    });
+
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
+
+    expect(invoke).toHaveBeenCalledWith("set_scan_directory_active", {
+      path: "~/projects/my-project",
+      isActive: false,
+    });
+  });
+
+  it("toggleScanDirectory re-enables a disabled directory", async () => {
     useSettingsStore.setState({
       scanDirectories: [
         { ...mockCustomDir, is_active: false },
       ],
     });
 
-    useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", true);
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", true);
 
     expect(useSettingsStore.getState().scanDirectories[0].is_active).toBe(true);
   });
 
-  it("toggleScanDirectory only affects the targeted directory", () => {
+  it("toggleScanDirectory only affects the targeted directory", async () => {
     useSettingsStore.setState({
       scanDirectories: [
         { ...mockBuiltinDir, is_active: true },
@@ -226,13 +242,25 @@ describe("settingsStore", () => {
       ],
     });
 
-    useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    await useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false);
 
     const state = useSettingsStore.getState();
     // builtin dir should be unchanged
     expect(state.scanDirectories[0].is_active).toBe(true);
     // custom dir should be toggled
     expect(state.scanDirectories[1].is_active).toBe(false);
+  });
+
+  it("toggleScanDirectory throws on backend failure", async () => {
+    useSettingsStore.setState({
+      scanDirectories: [{ ...mockCustomDir, is_active: true }],
+    });
+
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("DB error"));
+    await expect(
+      useSettingsStore.getState().toggleScanDirectory("~/projects/my-project", false)
+    ).rejects.toThrow("DB error");
   });
 
   // ── addCustomAgent ────────────────────────────────────────────────────────
