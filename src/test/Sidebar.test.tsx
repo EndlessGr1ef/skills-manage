@@ -14,7 +14,13 @@ vi.mock("../stores/collectionStore", () => ({
   useCollectionStore: vi.fn(),
 }));
 
+// Mock the discoverStore
+vi.mock("../stores/discoverStore", () => ({
+  useDiscoverStore: vi.fn(),
+}));
+
 import { useCollectionStore } from "../stores/collectionStore";
+import { useDiscoverStore } from "../stores/discoverStore";
 
 const mockAgents = [
   {
@@ -77,8 +83,17 @@ const defaultCollectionState = {
   importCollection: vi.fn(),
 };
 
+const defaultDiscoverState = {
+  totalSkillsFound: 0,
+  loadDiscoveredSkills: vi.fn(),
+};
+
 function renderSidebar(initialPath = "/central") {
   vi.mocked(usePlatformStore).mockReturnValue(defaultStoreState);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
+    selector(defaultDiscoverState)
+  );
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Sidebar />
@@ -303,5 +318,22 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /展开侧边栏/i }));
     // Should show collapse button again
     expect(screen.getByRole("button", { name: /折叠侧边栏/i })).toBeInTheDocument();
+  });
+
+  // ── Discover ─────────────────────────────────────────────────────────────
+
+  it("renders Discover entry in sidebar", () => {
+    renderSidebar();
+    // The discover entry should be present with the i18n label
+    expect(screen.getByRole("button", { name: "已发现" })).toBeInTheDocument();
+  });
+
+  it("shows badge with discovered skills count", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
+      selector({ ...defaultDiscoverState, totalSkillsFound: 5 })
+    );
+    renderSidebar();
+    expect(screen.getByText("5")).toBeInTheDocument();
   });
 });

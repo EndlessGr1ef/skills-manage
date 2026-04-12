@@ -96,7 +96,7 @@ function ProjectGroup({
   selectedSkillIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onInstallToCentral: (id: string) => void;
-  onInstallToPlatform: (id: string) => void;
+  onInstallToPlatform: (skill: DiscoveredSkill) => void;
   importingIds: Set<string>;
 }) {
   return (
@@ -122,7 +122,7 @@ function ProjectGroup({
             isSelected={selectedSkillIds.has(skill.id)}
             onToggleSelect={() => onToggleSelect(skill.id)}
             onInstallToCentral={() => onInstallToCentral(skill.id)}
-            onInstallToPlatform={() => onInstallToPlatform(skill.id)}
+            onInstallToPlatform={() => onInstallToPlatform(skill)}
             isImporting={importingIds.has(skill.id)}
           />
         ))}
@@ -147,7 +147,7 @@ function PlatformGroup({
   selectedSkillIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onInstallToCentral: (id: string) => void;
-  onInstallToPlatform: (id: string) => void;
+  onInstallToPlatform: (skill: DiscoveredSkill) => void;
   importingIds: Set<string>;
 }) {
   return (
@@ -166,7 +166,7 @@ function PlatformGroup({
             isSelected={selectedSkillIds.has(skill.id)}
             onToggleSelect={() => onToggleSelect(skill.id)}
             onInstallToCentral={() => onInstallToCentral(skill.id)}
-            onInstallToPlatform={() => onInstallToPlatform(skill.id)}
+            onInstallToPlatform={() => onInstallToPlatform(skill)}
             isImporting={importingIds.has(skill.id)}
           />
         ))}
@@ -461,7 +461,7 @@ export function DiscoverView() {
                 selectedSkillIds={selectedSkillIds}
                 onToggleSelect={toggleSkillSelection}
                 onInstallToCentral={handleInstallToCentral}
-                onInstallToPlatform={() => handleInstallToPlatform(project.skills[0])}
+                onInstallToPlatform={handleInstallToPlatform}
                 importingIds={importingIds}
               />
             ))}
@@ -476,7 +476,7 @@ export function DiscoverView() {
                 selectedSkillIds={selectedSkillIds}
                 onToggleSelect={toggleSkillSelection}
                 onInstallToCentral={handleInstallToCentral}
-                onInstallToPlatform={() => handleInstallToPlatform(group.skills[0])}
+                onInstallToPlatform={handleInstallToPlatform}
                 importingIds={importingIds}
               />
             ))}

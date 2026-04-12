@@ -7,6 +7,7 @@ import {
   Upload,
   PackageOpen,
   Folder,
+  FolderSearch,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -14,8 +15,7 @@ import { useTranslation } from "react-i18next";
 import { PlatformIcon } from "@/components/platform/PlatformIcon";
 import { usePlatformStore } from "@/stores/platformStore";
 import { useCollectionStore } from "@/stores/collectionStore";
-// Discover store available for future use
-// import { useDiscoverStore } from "@/stores/discoverStore";
+import { useDiscoverStore } from "@/stores/discoverStore";
 import { CollectionEditor } from "@/components/collection/CollectionEditor";
 import { cn } from "@/lib/utils";
 
@@ -152,15 +152,19 @@ export function Sidebar() {
   const loadCollections = useCollectionStore((s) => s.loadCollections);
   const importCollection = useCollectionStore((s) => s.importCollection);
 
+  const discoveredTotalSkills = useDiscoverStore((s) => s.totalSkillsFound);
+  const loadDiscoveredSkills = useDiscoverStore((s) => s.loadDiscoveredSkills);
+
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   // Start expanded; auto-collapse is applied after mount via resize listener
   const [collapsed, setCollapsed] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  // Load collections on mount.
+  // Load collections and discovered skills on mount.
   useEffect(() => {
     loadCollections();
-  }, [loadCollections]);
+    loadDiscoveredSkills();
+  }, [loadCollections, loadDiscoveredSkills]);
 
   // Auto-collapse when window is narrow.
   useEffect(() => {
@@ -293,6 +297,29 @@ export function Sidebar() {
               isActive={pathname === "/central"}
               onClick={() => navigate("/central")}
               badgeVariant="primary"
+            />
+          )}
+        </section>
+
+        {/* ── Discover ──────────────────────────────────────────── */}
+        <section aria-label={t("sidebar.discovered")} className="pb-2 border-b border-sidebar-border/70">
+          {collapsed ? (
+            <div className="px-1">
+              <NavItem
+                label={t("sidebar.discovered")}
+                isActive={pathname === "/discover"}
+                onClick={() => navigate("/discover")}
+                icon={<FolderSearch className="size-4" />}
+                collapsed={collapsed}
+              />
+            </div>
+          ) : (
+            <NavItem
+              label={t("sidebar.discovered")}
+              badge={discoveredTotalSkills > 0 ? discoveredTotalSkills : undefined}
+              isActive={pathname === "/discover"}
+              onClick={() => navigate("/discover")}
+              icon={<FolderSearch className="size-4" />}
             />
           )}
         </section>

@@ -43,7 +43,7 @@ interface DiscoverState {
 
   // Actions
   loadScanRoots: () => Promise<void>;
-  setScanRootEnabled: (path: string, enabled: boolean) => void;
+  setScanRootEnabled: (path: string, enabled: boolean) => Promise<void>;
   startScan: () => Promise<void>;
   stopScan: () => Promise<void>;
   loadDiscoveredSkills: () => Promise<void>;
@@ -144,19 +144,34 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
   loadScanRoots: async () => {
     set({ isLoadingRoots: true, error: null });
     try {
-      const roots = await invoke<ScanRoot[]>("discover_scan_roots");
+      // Use get_scan_roots which overlays persisted enabled/disabled states
+      // from the DB, rather than discover_scan_roots which only auto-detects.
+      const roots = await invoke<ScanRoot[]>("get_scan_roots");
       set({ scanRoots: roots, isLoadingRoots: false });
     } catch (err) {
       set({ error: String(err), isLoadingRoots: false });
     }
   },
 
-  setScanRootEnabled: (path: string, enabled: boolean) => {
+  setScanRootEnabled: async (path: string, enabled: boolean) => {
+    // Optimistically update local state.
     set((state) => ({
       scanRoots: state.scanRoots.map((r) =>
         r.path === path ? { ...r, enabled } : r
       ),
     }));
+    // Persist the change to the backend.
+    try {
+      await invoke("set_scan_root_enabled", { path, enabled });
+    } catch (err) {
+      // Revert on failure.
+      set((state) => ({
+        scanRoots: state.scanRoots.map((r) =>
+          r.path === path ? { ...r, enabled: !enabled } : r
+        ),
+        error: String(err),
+      }));
+    }
   },
 
   // ── Scan ───────────────────────────────────────────────────────────────────
