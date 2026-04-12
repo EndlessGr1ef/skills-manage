@@ -20,7 +20,7 @@ function PlatformBadge({ agent, isLinked }: PlatformBadgeProps) {
     <div
       className={cn(
         "flex items-center gap-1 text-xs",
-        isLinked ? "text-green-600 dark:text-green-400" : "text-muted-foreground/60"
+        isLinked ? "text-primary" : "text-muted-foreground/60"
       )}
       title={`${agent.display_name}: ${isLinked ? t("central.linked") : t("central.notLinked")}`}
     >

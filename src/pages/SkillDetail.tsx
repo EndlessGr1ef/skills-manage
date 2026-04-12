@@ -72,7 +72,7 @@ function PlatformInstallRow({
         className={cn(
           "size-5 rounded-full flex items-center justify-center shrink-0",
           isInstalled
-            ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+            ? "bg-primary/15 text-primary"
             : "bg-muted text-muted-foreground/40"
         )}
       >

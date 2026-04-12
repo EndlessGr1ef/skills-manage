@@ -150,7 +150,7 @@ export function InstallDialog({
                       {agent.display_name}
                     </span>
                     {isLinked && (
-                      <span className="text-xs text-green-600 dark:text-green-400">
+                      <span className="text-xs text-primary">
                         {t("installDialog.alreadyLinked")}
                       </span>
                     )}
