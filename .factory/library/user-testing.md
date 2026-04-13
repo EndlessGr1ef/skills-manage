@@ -48,3 +48,16 @@
 - In some sessions the Tauri window stays on-screen but never becomes frontmost: `CGWindowListCopyWindowInfo(...)` shows the `skills-manage` window, yet `AXFrontmost` stays false and the AX tree collapses to recursive `AXApplication`/`AXMenuBar` nodes. If `System Events`, `NSRunningApplication.activate`, `SetFrontProcess`, and synthetic `CGEvent` clicks all fail to foreground the window, capture evidence with `screencapture -l <window-id>` plus OCR/SQLite checks and treat interaction-dependent assertions as blocked.
 - For native `NSOpenPanel` file pickers, the left sidebar locations can be changed reliably by setting the target `AXRow`'s `AXSelected` attribute to `true` and then performing `AXShowDefaultUI`; the `Where:` popup updates immediately (for example, to `Downloads`).
 - In this environment, `NSOpenPanel` list-view file rows can report `AXSelected=true` while the `Open` button still stays disabled; `AXConfirm`, `AXOpen`, keyboard Enter/Return, and synthetic clicks were not sufficient to complete the file-pick action for collection import validation, so treat that step as a native-dialog automation blocker unless you have a proven real-click path.
+
+## Rapid OCR-Based WKWebView Content Verification
+
+When the AX tree doesn't expose WKWebView content (common after app restarts where the window doesn't become frontmost), use rapid `screencapture` + `tesseract` OCR to verify what's on screen:
+
+1. Get the window ID: `python3 /tmp/skills-manage-test-fixtures/ax_skills_manage.py window-id`
+2. Take rapid screenshots at 30-50ms intervals: `screencapture -l <wid> frame-NNN.png`
+3. OCR each frame: `tesseract frame-NNN.png stdout --psm 6`
+4. Parse OCR output for expected text (buttons, labels, progress indicators)
+
+This approach was successfully used to verify the "Stop & Show Results" button visibility during a Discover scan at sub-100ms resolution. It works even when the AX tree collapses and is more reliable than AX tree polling for rapidly changing UI states.
+
+**Tip:** The scan completes in ~100ms with typical fixture sizes (120 skills across 8 roots). To slow it down, create deeply nested noise directories (8+ levels deep with files at each level) in each scan root — 500+ per root adds ~45000 directories and noticeably slows the filesystem walk.
