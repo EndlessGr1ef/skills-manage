@@ -264,6 +264,13 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
             is_builtin  BOOLEAN NOT NULL DEFAULT 0,
             is_enabled  BOOLEAN NOT NULL DEFAULT 1,
             last_synced TEXT,
+            last_attempted_sync TEXT,
+            last_sync_status TEXT NOT NULL DEFAULT 'never',
+            last_sync_error TEXT,
+            cache_updated_at TEXT,
+            cache_expires_at TEXT,
+            etag TEXT,
+            last_modified TEXT,
             created_at  TEXT NOT NULL
         )",
     )
@@ -281,12 +288,86 @@ pub async fn init_database(pool: &DbPool) -> Result<(), String> {
             download_url TEXT NOT NULL,
             is_installed BOOLEAN NOT NULL DEFAULT 0,
             synced_at    TEXT NOT NULL,
+            cache_updated_at TEXT,
             FOREIGN KEY (registry_id) REFERENCES skill_registries(id)
         )",
     )
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
+
+    // skill_explanations table — cached AI-generated skill explanations
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS skill_explanations (
+            skill_id    TEXT NOT NULL,
+            explanation TEXT NOT NULL,
+            lang        TEXT NOT NULL DEFAULT 'zh',
+            model       TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (skill_id, lang)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    ensure_column(
+        pool,
+        "skill_registries",
+        "last_attempted_sync",
+        "ALTER TABLE skill_registries ADD COLUMN last_attempted_sync TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_registries",
+        "last_sync_status",
+        "ALTER TABLE skill_registries ADD COLUMN last_sync_status TEXT NOT NULL DEFAULT 'never'",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_registries",
+        "last_sync_error",
+        "ALTER TABLE skill_registries ADD COLUMN last_sync_error TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_registries",
+        "cache_updated_at",
+        "ALTER TABLE skill_registries ADD COLUMN cache_updated_at TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_registries",
+        "cache_expires_at",
+        "ALTER TABLE skill_registries ADD COLUMN cache_expires_at TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_registries",
+        "etag",
+        "ALTER TABLE skill_registries ADD COLUMN etag TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "skill_registries",
+        "last_modified",
+        "ALTER TABLE skill_registries ADD COLUMN last_modified TEXT",
+    )
+    .await?;
+    ensure_column(
+        pool,
+        "marketplace_skills",
+        "cache_updated_at",
+        "ALTER TABLE marketplace_skills ADD COLUMN cache_updated_at TEXT",
+    )
+    .await?;
 
     // Seed built-in agents (INSERT OR IGNORE so repeated init is safe)
     seed_builtin_agents(pool).await?;
@@ -412,6 +493,33 @@ async fn seed_builtin_registries(pool: &DbPool) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+async fn ensure_column(
+    pool: &DbPool,
+    table: &str,
+    column: &str,
+    alter_sql: &str,
+) -> Result<(), String> {
+    let pragma = format!("PRAGMA table_info({table})");
+    let rows = sqlx::query(&pragma)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let has_column = rows.iter().any(|row| {
+        use sqlx::Row;
+        row.get::<String, _>("name") == column
+    });
+
+    if !has_column {
+        sqlx::query(alter_sql)
+            .execute(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 

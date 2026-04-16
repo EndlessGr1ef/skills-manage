@@ -97,9 +97,13 @@ pub fn run() {
             commands::marketplace::add_registry,
             commands::marketplace::remove_registry,
             commands::marketplace::sync_registry,
+            commands::marketplace::sync_registry_with_options,
             commands::marketplace::search_marketplace_skills,
             commands::marketplace::install_marketplace_skill,
             commands::marketplace::explain_skill,
+            commands::marketplace::get_skill_explanation,
+            commands::marketplace::explain_skill_stream,
+            commands::marketplace::refresh_skill_explanation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
