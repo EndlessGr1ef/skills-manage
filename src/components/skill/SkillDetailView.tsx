@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState, type Ref, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  ArrowLeft,
   Tag,
   Plus,
   FileText,
@@ -24,7 +22,6 @@ import { CollectionPickerDialog } from "@/components/collection/CollectionPicker
 import { AgentWithStatus, SkillInstallation } from "@/types";
 import { cn } from "@/lib/utils";
 import { isTauriRuntime } from "@/lib/tauri";
-import { saveScrollPosition } from "@/lib/scrollRestoration";
 
 // ─── Section Label ─────────────────────────────────────────────────────────────
 
@@ -160,12 +157,40 @@ const detailTypographyClassName = cn(
   "[&_pre_code]:text-[12px] [&_pre_code]:leading-5"
 );
 
-// ─── SkillDetail ──────────────────────────────────────────────────────────────
+// ─── SkillDetailView ──────────────────────────────────────────────────────────
 
-export function SkillDetail() {
-  const { skillId } = useParams<{ skillId: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
+/**
+ * Shared presentation component for skill detail. Rendered by both the
+ * full-page route wrapper (`SkillDetailPage`) and the list-entry drawer
+ * (`SkillDetailDrawer`). This component owns:
+ *   - ViewHeader (title/description/TabToggle + optional leading slot)
+ *   - TwoColumnLayout (LeftPreview tab panel + RightSidebar metadata/install/collections)
+ *   - CollectionPicker portal
+ *
+ * It does NOT render a back button, breadcrumb, or close button. Those belong
+ * to the outer shell. It also does NOT call `useNavigate` / `useParams`; all
+ * route/shell concerns are handled outside.
+ */
+export interface SkillDetailViewProps {
+  /** The skill id to load. */
+  skillId: string;
+  /** Affects local styling only, never behavior. */
+  variant: "page" | "drawer";
+  /** ViewHeader leftmost slot; currently null from both shells. */
+  leading?: ReactNode;
+  /** Drawer-only: used so the view can request its shell to close (e.g. on Esc). */
+  onRequestClose?: () => void;
+  /** Optional: exposes the left-preview scroll container to the outer shell. */
+  scrollContainerRef?: Ref<HTMLDivElement>;
+}
+
+export function SkillDetailView({
+  skillId,
+  variant,
+  leading = null,
+  onRequestClose: _onRequestClose,
+  scrollContainerRef,
+}: SkillDetailViewProps) {
   const { t, i18n } = useTranslation();
 
   // Store data
@@ -197,7 +222,9 @@ export function SkillDetail() {
   const [isCollectionPickerOpen, setIsCollectionPickerOpen] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
-  // Load detail on mount / skillId change, reset on unmount
+  // Load detail on mount / skillId change, reset on unmount.
+  // `reset()` must be safe to call regardless of shell and aborts any
+  // in-flight AI explanation request via its monotonic request-id logic.
   useEffect(() => {
     if (skillId) {
       loadDetail(skillId);
@@ -265,30 +292,16 @@ export function SkillDetail() {
     }
   }
 
-  function handleGoBack() {
-    const restorationState = location.state?.scrollRestoration;
-    if (restorationState?.key) {
-      saveScrollPosition(restorationState.key, restorationState.scrollTop ?? 0);
-    }
-    navigate(-1);
-  }
-
   const markdownContent = content ? stripFrontmatter(content) : "";
   const isBrowserFallback = !isTauriRuntime() && !isLoading && !detail && !error;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
+    <div className={cn("flex flex-col h-full", variant === "drawer" && "min-h-0")}>
+      {/* ── ViewHeader: leading slot + title/description + TabToggle ─────── */}
       <div className="border-b border-border px-6 py-3 flex items-center gap-3 shrink-0">
-        <button
-          onClick={handleGoBack}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-          aria-label={t("detail.goBack")}
-        >
-          <ArrowLeft className="size-4" />
-        </button>
+        {leading}
         <div className="min-w-0 flex-1">
           <h1 className="text-lg font-semibold truncate">
             {isLoading ? (skillId ?? "") : (detail?.name ?? skillId ?? "")}
@@ -302,7 +315,7 @@ export function SkillDetail() {
         <TabToggle activeTab={activeTab} onChange={setActiveTab} />
       </div>
 
-      {/* Content area */}
+      {/* ── ContentArea ──────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-hidden">
         {/* Loading state */}
         {isLoading && (
@@ -342,11 +355,14 @@ export function SkillDetail() {
           </div>
         )}
 
-        {/* Two-column layout: Preview (left) + Sidebar (right) */}
+        {/* ── TwoColumnLayout: LeftPreview + RightSidebar ────────────────── */}
         {!isLoading && !error && detail && (
           <div className="flex h-full">
             {/* ── Left: SKILL.md Preview ─────────────────────────────── */}
-            <div className="flex-1 min-w-0 overflow-auto">
+            <div
+              ref={scrollContainerRef}
+              className="flex-1 min-w-0 overflow-auto"
+            >
               {activeTab === "markdown" ? (
                 <div
                   className={cn("markdown-body p-6", detailTypographyClassName)}

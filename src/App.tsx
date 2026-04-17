@@ -2,7 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { PlatformView } from "@/pages/PlatformView";
 import { CentralSkillsView } from "@/pages/CentralSkillsView";
-import { SkillDetail } from "@/pages/SkillDetail";
+import { SkillDetailPage } from "@/pages/SkillDetailPage";
 import { CollectionsListView } from "@/pages/CollectionsListView";
 import { MarketplaceView } from "@/pages/MarketplaceView";
 import { SettingsView } from "@/pages/SettingsView";
@@ -19,7 +19,7 @@ function App() {
         {/* Central Skills: canonical ~/.agents/skills/ view */}
         <Route path="central" element={<CentralSkillsView />} />
         {/* Skill detail page */}
-        <Route path="skill/:skillId" element={<SkillDetail />} />
+        <Route path="skill/:skillId" element={<SkillDetailPage />} />
         {/* Collections */}
         <Route path="collections" element={<CollectionsListView />} />
         {/* Marketplace */}
