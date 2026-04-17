@@ -188,6 +188,20 @@ describe("SkillDetailDrawer", () => {
     });
   });
 
+  it("fully unmounts the shared overlay after close", async () => {
+    render(<TestHarness />);
+
+    expect(await screen.findByTestId("skill-detail-drawer-overlay")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("skill-detail-drawer")).toBeNull();
+      expect(screen.queryByTestId("skill-detail-drawer-overlay")).toBeNull();
+      expect(document.querySelector("[data-base-ui-inert]")).toBeNull();
+    });
+  });
+
   it("wires aria-labelledby to the SkillDetailView heading", async () => {
     render(<TestHarness />);
 

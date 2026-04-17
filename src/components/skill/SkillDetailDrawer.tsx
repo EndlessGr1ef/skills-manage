@@ -23,6 +23,26 @@ export function SkillDetailDrawer({
   const titleId = useId();
 
   useEffect(() => {
+    if (open || typeof document === "undefined") {
+      return;
+    }
+
+    const clearLingeringBackdrop = () => {
+      for (const element of Array.from(
+        document.querySelectorAll<HTMLElement>("[data-base-ui-inert]")
+      )) {
+        element.remove();
+      }
+    };
+
+    clearLingeringBackdrop();
+
+    return () => {
+      clearLingeringBackdrop();
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (open) {
       return;
     }
@@ -32,7 +52,7 @@ export function SkillDetailDrawer({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPortal>
+      <DialogPortal keepMounted={false}>
         <DialogOverlay
           data-testid="skill-detail-drawer-overlay"
           className="bg-black/30"
