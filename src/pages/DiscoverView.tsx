@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Radar,
@@ -7,10 +7,11 @@ import {
   Folder,
   ArrowUpRight,
   StopCircle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,10 @@ import { useDiscoverStore } from "@/stores/discoverStore";
 import { usePlatformStore } from "@/stores/platformStore";
 import { DiscoveredSkill, SkillWithLinks } from "@/types";
 import { cn } from "@/lib/utils";
+import {
+  consumeScrollPosition,
+  createScrollRestorationState,
+} from "@/lib/scrollRestoration";
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
@@ -91,7 +96,9 @@ function ProgressView() {
 export function DiscoverView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { projectPath } = useParams<{ projectPath: string }>();
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   // Store state
   const isScanning = useDiscoverStore((s) => s.isScanning);
@@ -117,27 +124,72 @@ export function DiscoverView() {
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [skillSearch, setSkillSearch] = useState("");
+  const restorationState = location.state?.scrollRestoration as
+    | { key?: string; scrollTop?: number }
+    | undefined;
+  const discoverContext = location.state?.discoverContext as
+    | { projectPath?: string; skillSearch?: string }
+    | undefined;
 
   // Load persisted results on mount.
   useEffect(() => {
     loadDiscoveredSkills();
   }, [loadDiscoveredSkills]);
 
+  useEffect(() => {
+    if (discoverContext?.skillSearch !== undefined) {
+      setSkillSearch(discoverContext.skillSearch);
+    }
+  }, [discoverContext?.skillSearch]);
+
   // Auto-select first project when none is selected and projects exist.
   useEffect(() => {
-    if (!projectPath && discoveredProjects.length > 0) {
+    if (
+      !projectPath &&
+      discoveredProjects.length > 0 &&
+      !discoverContext?.projectPath
+    ) {
       navigate(`/discover/${encodeURIComponent(discoveredProjects[0].project_path)}`, { replace: true });
     }
-  }, [projectPath, discoveredProjects, navigate]);
+  }, [projectPath, discoveredProjects, navigate, discoverContext?.projectPath]);
+
+  useEffect(() => {
+    if (!projectPath || !discoverContext?.projectPath) {
+      return;
+    }
+
+    const decodedPath = decodeURIComponent(projectPath);
+    if (decodedPath === discoverContext.projectPath) {
+      return;
+    }
+
+    navigate(`/discover/${encodeURIComponent(discoverContext.projectPath)}`, {
+      replace: true,
+      state: location.state,
+    });
+  }, [projectPath, discoverContext?.projectPath, navigate, location.state]);
+
+  // Trimmed/normalized search queries — memoized so case-conversion doesn't
+  // happen during every filter pass when the user is just clicking between
+  // projects or skills.
+  const normalizedProjectQuery = useMemo(
+    () => projectSearch.trim().toLowerCase(),
+    [projectSearch]
+  );
+  const normalizedSkillQuery = useMemo(
+    () => skillSearch.trim().toLowerCase(),
+    [skillSearch]
+  );
 
   // Filtered project list for the left panel.
   const filteredProjectList = useMemo(() => {
-    if (!projectSearch.trim()) return discoveredProjects;
-    const q = projectSearch.toLowerCase();
+    if (!normalizedProjectQuery) return discoveredProjects;
     return discoveredProjects.filter(
-      (p) => p.project_name.toLowerCase().includes(q) || p.project_path.toLowerCase().includes(q)
+      (p) =>
+        p.project_name.toLowerCase().includes(normalizedProjectQuery) ||
+        p.project_path.toLowerCase().includes(normalizedProjectQuery)
     );
-  }, [discoveredProjects, projectSearch]);
+  }, [discoveredProjects, normalizedProjectQuery]);
 
   // Currently selected project.
   const selectedProject = useMemo(() => {
@@ -146,17 +198,55 @@ export function DiscoverView() {
     return discoveredProjects.find((p) => p.project_path === decoded) ?? null;
   }, [discoveredProjects, projectPath]);
 
+  // Whether the currently selected project still matches the active project
+  // filter. When it doesn't we keep the selection (valid context) but dim the
+  // inactive entry rather than force-navigating away mid-typing.
+  const selectedProjectMatchesFilter = useMemo(() => {
+    if (!selectedProject) return true;
+    if (!normalizedProjectQuery) return true;
+    return (
+      selectedProject.project_name.toLowerCase().includes(normalizedProjectQuery) ||
+      selectedProject.project_path.toLowerCase().includes(normalizedProjectQuery)
+    );
+  }, [selectedProject, normalizedProjectQuery]);
+
   // Skills for the selected project, filtered by skill search.
   const displayedSkills = useMemo(() => {
     if (!selectedProject) return [];
-    if (!skillSearch.trim()) return selectedProject.skills;
-    const q = skillSearch.toLowerCase();
+    if (!normalizedSkillQuery) return selectedProject.skills;
     return selectedProject.skills.filter(
       (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.description?.toLowerCase().includes(q)
+        s.name.toLowerCase().includes(normalizedSkillQuery) ||
+        s.description?.toLowerCase().includes(normalizedSkillQuery)
     );
-  }, [selectedProject, skillSearch]);
+  }, [selectedProject, normalizedSkillQuery]);
+
+  useEffect(() => {
+    if (!selectedProject || !restorationState?.key || !contentRef.current) {
+      return;
+    }
+
+    // Prefer the in-memory map (populated by SkillDetail's back handler on the
+    // real list → detail → back flow). Fall back to the scroll position that
+    // was passed directly via location.state so that restoration still works
+    // when the list is hydrated with state intact (no stale restore over a
+    // filtered list, since the effect runs after data hydration and only
+    // consumes the value once).
+    let scrollTop = consumeScrollPosition(restorationState.key);
+    if (scrollTop === null && typeof restorationState.scrollTop === "number") {
+      scrollTop = restorationState.scrollTop;
+    }
+    if (scrollTop === null) {
+      return;
+    }
+
+    contentRef.current.scrollTop = scrollTop;
+  }, [
+    selectedProject,
+    displayedSkills.length,
+    restorationState?.key,
+    restorationState?.scrollTop,
+  ]);
 
   // Available platform agents for install dialog.
   const platformAgents = useMemo(
@@ -166,65 +256,82 @@ export function DiscoverView() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  async function handleInstallToCentral(skillId: string) {
-    setImportingIds((prev) => new Set(prev).add(skillId));
-    try {
-      await importToCentral(skillId);
-      await Promise.all([refreshCounts(), refreshDiscoverCounts()]);
-      toast.success(t("discover.importSuccess"));
-    } catch (err) {
-      toast.error(t("discover.importError", { error: String(err) }));
-    } finally {
-      setImportingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(skillId);
-        return next;
-      });
-    }
-  }
+  const handleInstallToCentral = useCallback(
+    async (skillId: string) => {
+      setImportingIds((prev) => new Set(prev).add(skillId));
+      try {
+        await importToCentral(skillId);
+        await Promise.all([refreshCounts(), refreshDiscoverCounts()]);
+        toast.success(t("discover.importSuccess"));
+      } catch (err) {
+        toast.error(t("discover.importError", { error: String(err) }));
+      } finally {
+        setImportingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(skillId);
+          return next;
+        });
+      }
+    },
+    [importToCentral, refreshCounts, refreshDiscoverCounts, t]
+  );
 
-  function handleInstallToPlatform(skill: DiscoveredSkill) {
+  const handleInstallToPlatform = useCallback((skill: DiscoveredSkill) => {
     setInstallTargetSkill(skill);
     setIsInstallDialogOpen(true);
-  }
+  }, []);
 
-  async function handleBatchInstallCentral() {
+  const handleBatchInstallCentral = useCallback(async () => {
     const ids = Array.from(selectedSkillIds);
     for (const id of ids) {
       await handleInstallToCentral(id);
     }
-  }
+  }, [selectedSkillIds, handleInstallToCentral]);
 
-  async function handleInstallFromDialog(
-    _skillId: string,
-    agentIds: string[],
-    _method: string
-  ) {
-    if (!installTargetSkill) return;
-    setImportingIds((prev) => new Set(prev).add(installTargetSkill!.id));
-    try {
-      for (const agentId of agentIds) {
-        await importToPlatform(installTargetSkill!.id, agentId);
+  const handleInstallFromDialog = useCallback(
+    async (_skillId: string, agentIds: string[], _method: string) => {
+      if (!installTargetSkill) return;
+      const targetId = installTargetSkill.id;
+      setImportingIds((prev) => new Set(prev).add(targetId));
+      try {
+        for (const agentId of agentIds) {
+          await importToPlatform(targetId, agentId);
+        }
+        await Promise.all([refreshCounts(), refreshDiscoverCounts()]);
+        toast.success(t("discover.importSuccess"));
+      } catch (err) {
+        toast.error(t("discover.importError", { error: String(err) }));
+      } finally {
+        setImportingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+        setIsInstallDialogOpen(false);
+        setInstallTargetSkill(null);
       }
-      await Promise.all([refreshCounts(), refreshDiscoverCounts()]);
-      toast.success(t("discover.importSuccess"));
-    } catch (err) {
-      toast.error(t("discover.importError", { error: String(err) }));
-    } finally {
-      setImportingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(installTargetSkill!.id);
-        return next;
-      });
-      setIsInstallDialogOpen(false);
-      setInstallTargetSkill(null);
-    }
-  }
+    },
+    [installTargetSkill, importToPlatform, refreshCounts, refreshDiscoverCounts, t]
+  );
 
-  async function handleRescan() {
+  const handleRescan = useCallback(async () => {
     await loadScanRoots();
     setIsConfigOpen(true);
-  }
+  }, [loadScanRoots]);
+
+  // Selecting a project is a purely navigational event — no store rescan or
+  // heavy data reload is needed, just a URL change. Keep the current skill
+  // search intact so the user's filter context is preserved across projects.
+  const handleSelectProject = useCallback(
+    (projectPathValue: string) => {
+      const encoded = encodeURIComponent(projectPathValue);
+      // Short-circuit if already selected so repeated clicks don't push new
+      // history entries or trigger redundant re-renders.
+      if (projectPath === projectPathValue) return;
+      navigate(`/discover/${encoded}`);
+    },
+    [navigate, projectPath]
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -291,42 +398,87 @@ export function DiscoverView() {
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder={t("discover.searchPlaceholder")}
+                placeholder={t("discover.projectSearchPlaceholder")}
                 value={projectSearch}
                 onChange={(e) => setProjectSearch(e.target.value)}
-                className="pl-7 h-7 text-xs bg-muted/40"
+                aria-label={t("discover.projectSearchPlaceholder")}
+                className="pl-7 pr-7 h-7 text-xs bg-muted/40"
               />
+              {projectSearch.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setProjectSearch("")}
+                  aria-label={t("discover.clearSearch")}
+                  title={t("discover.clearSearch")}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
             </div>
           </div>
 
           {/* Project list */}
           <div className="flex-1 overflow-y-auto py-1">
-            {filteredProjectList.map((project) => {
-              const encoded = encodeURIComponent(project.project_path);
-              const isActive = projectPath === project.project_path;
-              return (
-                <button
-                  key={project.project_path}
-                  onClick={() => {
-                    navigate(`/discover/${encoded}`);
-                    setSkillSearch("");
-                  }}
-                  title={project.project_path}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border-l-2 rounded-md",
-                    isActive
-                      ? "bg-primary/15 border-primary text-foreground font-medium"
-                      : "hover:bg-muted/40 border-transparent text-muted-foreground"
-                  )}
+            {filteredProjectList.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 px-3 py-6 text-center">
+                <p className="text-xs text-muted-foreground">
+                  {t("discover.noProjectMatch", { query: projectSearch })}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setProjectSearch("")}
+                  className="h-7 text-xs"
                 >
-                  <Folder className={cn("size-3.5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
-                  <span className="text-sm truncate flex-1">{project.project_name}</span>
+                  <X className="size-3 mr-1" />
+                  {t("discover.clearSearch")}
+                </Button>
+              </div>
+            ) : (
+              filteredProjectList.map((project) => {
+                const isActive = selectedProject?.project_path === project.project_path;
+                return (
+                  <button
+                    key={project.project_path}
+                    onClick={() => handleSelectProject(project.project_path)}
+                    title={project.project_path}
+                    className={cn(
+                      "flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border-l-2 rounded-md",
+                      isActive
+                        ? "bg-primary/15 border-primary text-foreground font-medium"
+                        : "hover:bg-muted/40 border-transparent text-muted-foreground"
+                    )}
+                  >
+                    <Folder className={cn("size-3.5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+                    <span className="text-sm truncate flex-1">{project.project_name}</span>
+                    <span className="text-[10px] font-mono tabular-nums text-muted-foreground shrink-0">
+                      {project.skills.length}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+            {/* Inactive-but-selected helper: when filter hides the current selection,
+                still show it at the bottom so the user keeps project context. */}
+            {selectedProject && !selectedProjectMatchesFilter && (
+              <div className="mt-2 pt-2 px-2 border-t border-border/60 space-y-1">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 px-1">
+                  {t("discover.title")}
+                </p>
+                <button
+                  onClick={() => handleSelectProject(selectedProject.project_path)}
+                  title={selectedProject.project_path}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-left transition-colors cursor-pointer border-l-2 rounded-md bg-primary/10 border-primary/60 text-foreground font-medium"
+                >
+                  <Folder className="size-3.5 shrink-0 text-primary" />
+                  <span className="text-sm truncate flex-1">{selectedProject.project_name}</span>
                   <span className="text-[10px] font-mono tabular-nums text-muted-foreground shrink-0">
-                    {project.skills.length}
+                    {selectedProject.skills.length}
                   </span>
                 </button>
-              );
-            })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -343,11 +495,23 @@ export function DiscoverView() {
                 <div className="relative w-48 shrink-0">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
                   <Input
-                    placeholder={t("discover.searchPlaceholder")}
+                    placeholder={t("discover.skillSearchPlaceholder")}
                     value={skillSearch}
                     onChange={(e) => setSkillSearch(e.target.value)}
-                    className="pl-7 h-7 text-xs bg-muted/40"
+                    aria-label={t("discover.skillSearchPlaceholder")}
+                    className="pl-7 pr-7 h-7 text-xs bg-muted/40"
                   />
+                  {skillSearch.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSkillSearch("")}
+                      aria-label={t("discover.clearSearch")}
+                      title={t("discover.clearSearch")}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
                 </div>
                 <span className="text-xs text-muted-foreground shrink-0">
                   {t("collection.skills", { count: displayedSkills.length })}
@@ -355,15 +519,26 @@ export function DiscoverView() {
               </div>
 
               {/* Skill cards */}
-              <div className="flex-1 overflow-auto p-4 space-y-2">
+              <div ref={contentRef} className="flex-1 overflow-auto p-4 space-y-2">
                 {displayedSkills.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full gap-3 py-12">
                     <Radar className="size-8 text-muted-foreground opacity-40" />
                     <p className="text-sm text-muted-foreground">
-                      {skillSearch.trim()
+                      {normalizedSkillQuery
                         ? t("discover.noMatch", { query: skillSearch })
                         : t("discover.noResults")}
                     </p>
+                    {normalizedSkillQuery && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSkillSearch("")}
+                        className="h-7 text-xs"
+                      >
+                        <X className="size-3 mr-1" />
+                        {t("discover.clearSearch")}
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   displayedSkills.map((skill) => (
@@ -378,7 +553,23 @@ export function DiscoverView() {
                       isCentral={skill.is_already_central}
                       platformBadge={{ id: skill.platform_id, name: skill.platform_name }}
                       projectBadge={skill.project_name}
-                      onDetail={skill.is_already_central ? () => navigate(`/skill/${skill.id}`) : undefined}
+                      onDetail={
+                        skill.is_already_central
+                          ? () =>
+                              navigate(`/skill/${skill.id}`, {
+                                state: {
+                                  discoverContext: {
+                                    projectPath: selectedProject.project_path,
+                                    skillSearch,
+                                  },
+                                  scrollRestoration: createScrollRestorationState(
+                                    `discover:${selectedProject.project_path}`,
+                                    contentRef.current?.scrollTop ?? 0
+                                  ),
+                                },
+                              })
+                          : undefined
+                      }
                       onInstallToCentral={() => handleInstallToCentral(skill.id)}
                       onInstallToPlatform={() => handleInstallToPlatform(skill)}
                       isLoading={importingIds.has(skill.id)}

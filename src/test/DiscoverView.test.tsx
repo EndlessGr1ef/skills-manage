@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { DiscoverView } from "../pages/DiscoverView";
 import { DiscoveredProject, DiscoveredSkill, AgentWithStatus } from "../types";
+import { consumeScrollPosition } from "../lib/scrollRestoration";
 
 // Mock stores
 vi.mock("../stores/discoverStore", () => ({
@@ -23,10 +24,13 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => {
       const map: Record<string, string> = {
+        "discover.title": "Discover Project Skills",
         "discover.resultsTitle": "Discovered Project Skills",
         "discover.foundSummary": `${params?.skills ?? 0} skills across ${params?.projects ?? 0} projects`,
         "discover.reScan": "Re-scan",
         "discover.searchPlaceholder": "Search discovered skills...",
+        "discover.projectSearchPlaceholder": "Filter projects...",
+        "discover.skillSearchPlaceholder": "Filter skills in this project...",
         "discover.scanning": "Scanning...",
         "discover.progress": `${params?.percent ?? 0}% — scanning ${params?.path ?? ""}`,
         "discover.foundSoFar": `${params?.skills ?? 0} skills in ${params?.projects ?? 0} projects`,
@@ -34,6 +38,8 @@ vi.mock("react-i18next", () => ({
         "discover.noResults": "No project skills discovered yet.",
         "discover.noResultsDesc": 'Click "Discover" to scan your project directories.',
         "discover.noMatch": `No skills match "${params?.query ?? ""}"`,
+        "discover.noProjectMatch": `No projects match "${params?.query ?? ""}"`,
+        "discover.clearSearch": "Clear search",
         "discover.installToCentral": "Install to Central",
         "discover.installToPlatform": "Install to Platform",
         "discover.alreadyCentral": "Already in Central",
@@ -44,6 +50,17 @@ vi.mock("react-i18next", () => ({
         "discover.importSuccess": "Skill imported successfully",
         "discover.importError": "Import failed",
         "collection.skills": `Skills (${params?.count ?? 0})`,
+        "central.viewDetailsLabel": `View details for ${params?.name ?? ""}`,
+        "central.installLabel": `Install ${params?.name ?? ""} to platform`,
+        "central.installTo": "Install to...",
+        "central.toggleInstallLabel": `Toggle ${params?.platform ?? ""} for ${params?.skill ?? ""}`,
+        "collection.removeSkillLabel": `Remove ${params?.name ?? ""}`,
+        "marketplace.installed": "Installed",
+        "sidebar.categoryLobster": "Lobster",
+        "sidebar.categoryCoding": "Coding",
+        "platform.sourceSymlink": "symlink",
+        "platform.sourceCopy": "copy",
+        "platform.searchSkillLabel": `Search skill ${params?.name ?? ""}`,
       };
       return map[key] ?? key;
     },
@@ -95,6 +112,59 @@ const mockProjects: DiscoveredProject[] = [
   },
 ];
 
+// Multi-project fixture for search filter coverage.
+const multiProjectSkillA: DiscoveredSkill = {
+  id: "claude-code__alpha__alpha-skill",
+  name: "alpha-skill",
+  description: "Alpha handler",
+  file_path: "/home/user/projects/alpha/.claude/skills/alpha-skill/SKILL.md",
+  dir_path: "/home/user/projects/alpha/.claude/skills/alpha-skill",
+  platform_id: "claude-code",
+  platform_name: "Claude Code",
+  project_path: "/home/user/projects/alpha",
+  project_name: "alpha",
+  is_already_central: false,
+};
+
+const multiProjectSkillB: DiscoveredSkill = {
+  id: "claude-code__beta__beta-skill",
+  name: "beta-skill",
+  description: "Beta handler",
+  file_path: "/home/user/projects/beta/.claude/skills/beta-skill/SKILL.md",
+  dir_path: "/home/user/projects/beta/.claude/skills/beta-skill",
+  platform_id: "claude-code",
+  platform_name: "Claude Code",
+  project_path: "/home/user/projects/beta",
+  project_name: "beta",
+  is_already_central: false,
+};
+
+const multiProjectSkillBExtra: DiscoveredSkill = {
+  id: "claude-code__beta__other-beta",
+  name: "other-beta",
+  description: "Another beta-only helper",
+  file_path: "/home/user/projects/beta/.claude/skills/other-beta/SKILL.md",
+  dir_path: "/home/user/projects/beta/.claude/skills/other-beta",
+  platform_id: "claude-code",
+  platform_name: "Claude Code",
+  project_path: "/home/user/projects/beta",
+  project_name: "beta",
+  is_already_central: false,
+};
+
+const multiProjects: DiscoveredProject[] = [
+  {
+    project_path: "/home/user/projects/alpha",
+    project_name: "alpha",
+    skills: [multiProjectSkillA],
+  },
+  {
+    project_path: "/home/user/projects/beta",
+    project_name: "beta",
+    skills: [multiProjectSkillB, multiProjectSkillBExtra],
+  },
+];
+
 const mockAgents: AgentWithStatus[] = [
   {
     id: "claude-code",
@@ -124,6 +194,8 @@ const mockToggleSkillSelection = vi.fn();
 const mockClearSelection = vi.fn();
 const mockRescan = vi.fn();
 const mockStopScan = vi.fn();
+const mockUseDiscoverStore = vi.mocked(useDiscoverStore);
+const mockUsePlatformStore = vi.mocked(usePlatformStore);
 
 function buildDiscoverStoreState(overrides = {}) {
   return {
@@ -154,6 +226,7 @@ function buildDiscoverStoreState(overrides = {}) {
     setScanRootEnabled: vi.fn(),
     clearResults: vi.fn(),
     selectAllVisible: vi.fn(),
+    refreshCounts: vi.fn(),
     clearError: vi.fn(),
     error: null,
     lastScanAt: null,
@@ -164,7 +237,13 @@ function buildDiscoverStoreState(overrides = {}) {
 function buildPlatformStoreState(overrides = {}) {
   return {
     agents: mockAgents,
+    skillsByAgent: {},
+    isLoading: false,
+    isRefreshing: false,
+    error: null,
+    initialize: vi.fn(),
     rescan: mockRescan,
+    refreshCounts: vi.fn(),
     ...overrides,
   };
 }
@@ -186,14 +265,8 @@ function renderDiscoverView(initialPath = "/discover") {
 describe("DiscoverView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
-      selector(buildDiscoverStoreState())
-    );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(usePlatformStore).mockImplementation((selector: any) =>
-      selector(buildPlatformStoreState())
-    );
+    mockUseDiscoverStore.mockImplementation((selector) => selector(buildDiscoverStoreState()));
+    mockUsePlatformStore.mockImplementation((selector) => selector(buildPlatformStoreState()));
   });
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -229,8 +302,7 @@ describe("DiscoverView", () => {
   // ── Empty state ────────────────────────────────────────────────────────────
 
   it("shows empty state when no discovered projects", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
+    mockUseDiscoverStore.mockImplementation((selector) =>
       selector(buildDiscoverStoreState({
         discoveredProjects: [],
         totalSkillsFound: 0,
@@ -244,8 +316,7 @@ describe("DiscoverView", () => {
   // ── Scanning state ─────────────────────────────────────────────────────────
 
   it("shows progress view during scan", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
+    mockUseDiscoverStore.mockImplementation((selector) =>
       selector(buildDiscoverStoreState({ isScanning: true }))
     );
 
@@ -256,8 +327,7 @@ describe("DiscoverView", () => {
 
   it("stop button calls stopScan when clicked during active scan", async () => {
     mockStopScan.mockResolvedValueOnce(undefined);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
+    mockUseDiscoverStore.mockImplementation((selector) =>
       selector(buildDiscoverStoreState({ isScanning: true }))
     );
 
@@ -287,11 +357,127 @@ describe("DiscoverView", () => {
     expect(screen.getByText("Already in Central")).toBeInTheDocument();
   });
 
+  it("passes discover project context and scroll restoration state when opening detail", async () => {
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+
+    render(
+      <MemoryRouter initialEntries={[`/discover/${encoded}`]}>
+        <Routes>
+          <Route path="/discover/:projectPath" element={<DiscoverView />} />
+          <Route path="/skill/:skillId" element={<div>detail-route</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scroller = screen.getByText("deploy").closest("[class*='overflow-auto']");
+    expect(scroller).not.toBeNull();
+    if (!scroller) return;
+
+    Object.defineProperty(scroller, "scrollTop", {
+      value: 210,
+      writable: true,
+      configurable: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /view details for review/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("detail-route")).toBeInTheDocument();
+    });
+
+    const historyState = window.history.state?.usr;
+    expect(historyState.discoverContext).toEqual({
+      projectPath: "/home/user/projects/my-app",
+      skillSearch: "",
+    });
+    expect(historyState.scrollRestoration).toEqual({
+      key: "discover:/home/user/projects/my-app",
+      scrollTop: 210,
+    });
+  });
+
+  it("restores discover project scroll after async hydration completes", async () => {
+    let discoverState = buildDiscoverStoreState({
+      discoveredProjects: [],
+      totalSkillsFound: 0,
+    });
+
+    mockUseDiscoverStore.mockImplementation((selector) => selector(discoverState));
+
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+    const { rerender } = render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: `/discover/${encoded}`,
+            state: {
+              discoverContext: {
+                projectPath: "/home/user/projects/my-app",
+                skillSearch: "",
+              },
+              scrollRestoration: {
+                key: "discover:/home/user/projects/my-app",
+                scrollTop: 360,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/discover/:projectPath" element={<DiscoverView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(consumeScrollPosition("discover:/home/user/projects/my-app")).toBeNull();
+
+    discoverState = buildDiscoverStoreState();
+    rerender(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: `/discover/${encoded}`,
+            state: {
+              discoverContext: {
+                projectPath: "/home/user/projects/my-app",
+                skillSearch: "",
+              },
+              scrollRestoration: {
+                key: "discover:/home/user/projects/my-app",
+                scrollTop: 360,
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/discover/:projectPath" element={<DiscoverView />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const scroller = screen.getByText("deploy").closest("[class*='overflow-auto']");
+    expect(scroller).not.toBeNull();
+    if (!scroller) return;
+
+    await waitFor(() => {
+      expect((scroller as HTMLDivElement).scrollTop).toBe(360);
+    });
+  });
+
+  it("shows install affordances and platform status metadata on discover cards", () => {
+    const encoded = encodeURIComponent("/home/user/projects/my-app");
+    renderDiscoverView(`/discover/${encoded}`);
+
+    expect(screen.getAllByTitle("Install to Platform").length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle("Install to Central").length).toBe(1);
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+  });
+
   // ── Selection ──────────────────────────────────────────────────────────────
 
   it("shows selection action bar when skills are selected", () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useDiscoverStore).mockImplementation((selector: any) =>
+    mockUseDiscoverStore.mockImplementation((selector) =>
       selector(buildDiscoverStoreState({
         selectedSkillIds: new Set(["claude-code__my-app__deploy"]),
       }))
@@ -318,6 +504,162 @@ describe("DiscoverView", () => {
 
     await waitFor(() => {
       expect(mockImportToCentral).toHaveBeenCalledWith("claude-code__my-app__deploy");
+    });
+  });
+
+  // ── Search behaviour (DISC-SEARCH-001 / 002) ──────────────────────────────
+
+  describe("search behaviour", () => {
+    function renderWithMultiProjects(initialPath = "/discover") {
+      mockUseDiscoverStore.mockImplementation((selector) =>
+        selector(
+          buildDiscoverStoreState({
+            discoveredProjects: multiProjects,
+            totalSkillsFound: 3,
+          })
+        )
+      );
+      return renderDiscoverView(initialPath);
+    }
+
+    it("filters project list by project search query", () => {
+      renderWithMultiProjects();
+      const projectSearchInput = screen.getByLabelText("Filter projects...") as HTMLInputElement;
+      fireEvent.change(projectSearchInput, { target: { value: "alpha" } });
+      // alpha appears in project list + detail header, beta should be absent
+      expect(screen.getAllByText("alpha").length).toBeGreaterThan(0);
+      expect(screen.queryByText("beta")).not.toBeInTheDocument();
+    });
+
+    it("shows a no-project-match empty state with a clear-search affordance", () => {
+      renderWithMultiProjects();
+      const projectSearchInput = screen.getByLabelText("Filter projects...") as HTMLInputElement;
+      fireEvent.change(projectSearchInput, { target: { value: "nonexistent" } });
+
+      expect(
+        screen.getByText('No projects match "nonexistent"')
+      ).toBeInTheDocument();
+
+      // A Clear-search button in the empty state should reset the input and restore projects.
+      const clearButtons = screen.getAllByText("Clear search");
+      expect(clearButtons.length).toBeGreaterThan(0);
+      fireEvent.click(clearButtons[0]);
+
+      expect(projectSearchInput.value).toBe("");
+      expect(screen.getAllByText("alpha").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("beta").length).toBeGreaterThan(0);
+    });
+
+    it("clearing the project search X button restores the prior project list", () => {
+      renderWithMultiProjects();
+      const projectSearchInput = screen.getByLabelText("Filter projects...") as HTMLInputElement;
+      fireEvent.change(projectSearchInput, { target: { value: "alpha" } });
+      expect(screen.queryByText("beta")).not.toBeInTheDocument();
+
+      const clearX = screen.getByRole("button", { name: "Clear search" });
+      fireEvent.click(clearX);
+
+      expect(projectSearchInput.value).toBe("");
+      expect(screen.getAllByText("alpha").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("beta").length).toBeGreaterThan(0);
+    });
+
+    it("keeps the currently selected project visible even when the project filter would hide it", () => {
+      const encoded = encodeURIComponent("/home/user/projects/beta");
+      renderWithMultiProjects(`/discover/${encoded}`);
+
+      const projectSearchInput = screen.getByLabelText("Filter projects...") as HTMLInputElement;
+      fireEvent.change(projectSearchInput, { target: { value: "alpha" } });
+
+      // The "beta-skill" detail pane must still render because beta is still
+      // the active project (valid context preserved) — we don't force-navigate
+      // the user away mid-typing.
+      expect(screen.getByText("beta-skill")).toBeInTheDocument();
+      // And beta must still appear somewhere (in the "current selection"
+      // fallback section of the project list).
+      expect(screen.getAllByText("beta").length).toBeGreaterThan(0);
+    });
+
+    it("filters skill list by skill search query within the selected project", () => {
+      const encoded = encodeURIComponent("/home/user/projects/beta");
+      renderWithMultiProjects(`/discover/${encoded}`);
+
+      const skillSearchInput = screen.getByLabelText(
+        "Filter skills in this project..."
+      ) as HTMLInputElement;
+      fireEvent.change(skillSearchInput, { target: { value: "other" } });
+
+      expect(screen.getByText("other-beta")).toBeInTheDocument();
+      expect(screen.queryByText("beta-skill")).not.toBeInTheDocument();
+    });
+
+    it("shows a no-skill-match empty state with a clear-search affordance", () => {
+      const encoded = encodeURIComponent("/home/user/projects/beta");
+      renderWithMultiProjects(`/discover/${encoded}`);
+
+      const skillSearchInput = screen.getByLabelText(
+        "Filter skills in this project..."
+      ) as HTMLInputElement;
+      fireEvent.change(skillSearchInput, { target: { value: "zzz" } });
+
+      expect(screen.getByText('No skills match "zzz"')).toBeInTheDocument();
+      const clearButtons = screen.getAllByText("Clear search");
+      expect(clearButtons.length).toBeGreaterThan(0);
+
+      fireEvent.click(clearButtons[clearButtons.length - 1]);
+
+      expect(skillSearchInput.value).toBe("");
+      expect(screen.getByText("beta-skill")).toBeInTheDocument();
+      expect(screen.getByText("other-beta")).toBeInTheDocument();
+    });
+
+    it("preserves the skill search query when switching between projects", () => {
+      const encoded = encodeURIComponent("/home/user/projects/beta");
+      renderWithMultiProjects(`/discover/${encoded}`);
+
+      const skillSearchInput = screen.getByLabelText(
+        "Filter skills in this project..."
+      ) as HTMLInputElement;
+      fireEvent.change(skillSearchInput, { target: { value: "other" } });
+      expect(skillSearchInput.value).toBe("other");
+
+      // Switch to another project (alpha) via the project list button.
+      fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+
+      const persistedSkillInput = screen.getByLabelText(
+        "Filter skills in this project..."
+      ) as HTMLInputElement;
+      expect(persistedSkillInput.value).toBe("other");
+    });
+  });
+
+  // ── Performance (DISC-PERF-001) ────────────────────────────────────────────
+
+  describe("selection responsiveness", () => {
+    it("does not re-invoke loadDiscoveredSkills when switching between projects", () => {
+      mockUseDiscoverStore.mockImplementation((selector) =>
+        selector(
+          buildDiscoverStoreState({
+            discoveredProjects: multiProjects,
+            totalSkillsFound: 3,
+          })
+        )
+      );
+
+      const encoded = encodeURIComponent("/home/user/projects/alpha");
+      renderDiscoverView(`/discover/${encoded}`);
+
+      // Initial mount calls loadDiscoveredSkills exactly once.
+      expect(mockLoadDiscoveredSkills).toHaveBeenCalledTimes(1);
+
+      // Click a different project — this is a purely navigational event and
+      // should not trigger another full reload (no heavy recomputation path).
+      fireEvent.click(screen.getByRole("button", { name: /beta/i }));
+
+      expect(mockLoadDiscoveredSkills).toHaveBeenCalledTimes(1);
+      // The right pane now reflects the beta project without any additional
+      // store-reload requests.
+      expect(screen.getByText("beta-skill")).toBeInTheDocument();
     });
   });
 });
