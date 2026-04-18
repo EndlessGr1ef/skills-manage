@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowLeft,
@@ -112,6 +112,7 @@ export function GitHubRepoImportWizard({
   const [selectionState, setSelectionState] = useState<Record<string, SelectionState>>({});
   const [postImportTargetSkillId, setPostImportTargetSkillId] = useState<string | null>(null);
   const [selectedSkillPath, setSelectedSkillPath] = useState<string | null>(null);
+  const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const browserMode = !isTauriRuntime();
 
   useEffect(() => {
@@ -173,12 +174,19 @@ export function GitHubRepoImportWizard({
 
   const canConfirm = selectedSkills.length > 0 && !blockingConflict;
   const isInputStep = step === "input" && !preview && !importResult;
+  const showPreviewWorkspace = Boolean(preview) && step === "preview";
   const dialogContentClassName = cn(
     "flex flex-col overflow-hidden p-0 transition-[width,max-width,height] duration-200 ease-out",
     isInputStep
       ? "h-auto max-h-[min(92vh,32rem)] !w-[min(92vw,48rem)] !max-w-[min(92vw,48rem)]"
       : "h-[min(90vh,760px)] !w-[min(94vw,1180px)] !max-w-[min(94vw,1180px)] xl:!w-[min(95vw,1280px)] xl:!max-w-[min(95vw,1280px)]"
   );
+
+  useEffect(() => {
+    if (step === "preview") {
+      detailScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }, [selectedSkillPath, step]);
 
   const selectedImportPayload = useMemo<GitHubSkillImportSelection[]>(() => {
     return selectedSkills.map((skill) => {
@@ -300,6 +308,105 @@ export function GitHubRepoImportWizard({
     navigate("/central");
   }
 
+  function renderUrlInputBlock() {
+    return (
+      <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 p-4">
+        <label className="mb-2 block text-sm font-medium" htmlFor="github-repo-url">
+          {t("marketplace.githubRepoUrl")}
+        </label>
+        <div className="flex gap-2">
+          <Input
+            id="github-repo-url"
+            value={repoUrl}
+            onChange={(event) => onRepoUrlChange(event.target.value)}
+            placeholder="https://github.com/owner/repo"
+            className="flex-1"
+          />
+          <Button onClick={handlePreviewSubmit} disabled={isPreviewLoading || !repoUrl.trim()}>
+            {isPreviewLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            <span>{t("marketplace.previewImport")}</span>
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {browserMode
+            ? t("marketplace.githubImportDesktopOnlyHint")
+            : t("marketplace.githubImportNoWriteHint")}
+        </p>
+        {browserMode ? (
+          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span>{t("marketplace.githubImportDesktopOnlyState")}</span>
+            </div>
+          </div>
+        ) : null}
+        {previewError ? (
+          <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div className="space-y-2">
+                <span className="block">{normalizeMessage(previewError)}</span>
+                {looksLikeGitHubAuthGuidance(previewError) ? (
+                  <span className="block text-xs text-destructive/90">
+                    {t("marketplace.githubPatSettingsHint")}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderPreviewToolbar(currentPreview: GitHubRepoPreview) {
+    return (
+      <div
+        className="mt-4 rounded-xl border border-border/70 bg-muted/10 p-4"
+        data-testid="github-import-repo-toolbar"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {t("marketplace.githubImportToolbarLabel")}
+              </span>
+              <span className="text-sm font-semibold">
+                {currentPreview.repo.owner}/{currentPreview.repo.repo}
+              </span>
+              {currentPreview.repo.branch ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                  {currentPreview.repo.branch}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <span>{t("marketplace.githubImportFoundSkills", { count: currentPreview.skills.length })}</span>
+              <span>{t("marketplace.githubImportToolbarSelected", { count: selectedSkills.length })}</span>
+              <span className="truncate">{currentPreview.repo.normalizedUrl}</span>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={`https://github.com/${currentPreview.repo.owner}/${currentPreview.repo.repo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ExternalLink className="size-3.5" />
+              <span>{t("marketplace.previewOpenSource")}</span>
+            </a>
+            <Button variant="outline" onClick={handlePreviewSubmit} disabled={isPreviewLoading || !repoUrl.trim()}>
+              {isPreviewLoading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              <span>{t("marketplace.githubImportRepreview")}</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className={dialogContentClassName}>
@@ -333,63 +440,19 @@ export function GitHubRepoImportWizard({
             ))}
           </div>
 
-          <div className="mt-4 rounded-xl border border-border/70 bg-muted/10 p-4">
-            <label className="mb-2 block text-sm font-medium" htmlFor="github-repo-url">
-              {t("marketplace.githubRepoUrl")}
-            </label>
-            <div className="flex gap-2">
-              <Input
-                id="github-repo-url"
-                value={repoUrl}
-                onChange={(event) => onRepoUrlChange(event.target.value)}
-                placeholder="https://github.com/owner/repo"
-                className="flex-1"
-              />
-              <Button onClick={handlePreviewSubmit} disabled={isPreviewLoading || !repoUrl.trim()}>
-                {isPreviewLoading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                <span>{t("marketplace.previewImport")}</span>
-              </Button>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {browserMode
-                ? t("marketplace.githubImportDesktopOnlyHint")
-                : t("marketplace.githubImportNoWriteHint")}
-            </p>
-            {browserMode ? (
-              <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <span>{t("marketplace.githubImportDesktopOnlyState")}</span>
-                </div>
-              </div>
-            ) : null}
-            {previewError ? (
-              <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                  <div className="space-y-2">
-                    <span className="block">{normalizeMessage(previewError)}</span>
-                    {looksLikeGitHubAuthGuidance(previewError) ? (
-                      <span className="block text-xs text-destructive/90">
-                        {t("marketplace.githubPatSettingsHint")}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          {showPreviewWorkspace && preview ? renderPreviewToolbar(preview) : renderUrlInputBlock()}
         </div>
 
         <div
           className={cn(
             "px-6 py-4",
-            preview || importResult ? "min-h-0 flex-1 overflow-y-auto" : "overflow-visible"
+            preview || importResult ? "min-h-0 flex-1 overflow-hidden" : "overflow-visible"
           )}
         >
           {preview ? (
             step === "confirm" ? (
-              <div className="space-y-5" data-testid="github-import-confirm-summary">
+              <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="github-import-confirm-summary">
+                <div className="min-h-0 flex-1 overflow-y-auto space-y-5 pr-1">
                 <div className="rounded-xl border border-border/70 bg-card/80 p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="space-y-1">
@@ -542,9 +605,11 @@ export function GitHubRepoImportWizard({
                     )}
                   </div>
                 </div>
+                </div>
               </div>
             ) : step === "result" && importResult ? (
-              <div className="space-y-5" data-testid="github-import-result-hub">
+              <div className="flex h-full min-h-0 flex-col overflow-hidden" data-testid="github-import-result-hub">
+                <div className="min-h-0 flex-1 overflow-y-auto space-y-5 pr-1">
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
                   <div className="flex items-start gap-3">
                     <div className="rounded-full bg-emerald-500/10 p-2 text-emerald-700 dark:text-emerald-300">
@@ -674,31 +739,10 @@ export function GitHubRepoImportWizard({
                     </div>
                   </div>
                 </div>
+                </div>
               </div>
             ) : (
               <div className="flex min-h-full flex-col gap-4">
-                <div className="rounded-xl border border-border/70 bg-card/80 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold">
-                        {preview.repo.owner}/{preview.repo.repo}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {t("marketplace.githubImportFoundSkills", { count: preview.skills.length })}
-                      </div>
-                    </div>
-                    <a
-                      href={`https://github.com/${preview.repo.owner}/${preview.repo.repo}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    >
-                      <ExternalLink className="size-3.5" />
-                      <span>{t("marketplace.previewOpenSource")}</span>
-                    </a>
-                  </div>
-                </div>
-
                 <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.45fr)] xl:grid-cols-[minmax(360px,0.88fr)_minmax(0,1.52fr)]">
                   <div className="flex min-h-[22rem] flex-col overflow-hidden rounded-xl border border-border/70 bg-card/70">
                     <div className="border-b border-border/60 px-4 py-3">
@@ -757,6 +801,9 @@ export function GitHubRepoImportWizard({
                                 <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                                   {skill.description || t("marketplace.githubImportNoDescription")}
                                 </div>
+                                <div className="mt-2 text-[11px] text-muted-foreground">
+                                  {skill.sourcePath}
+                                </div>
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   {skill.conflict ? (
                                     <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600">
@@ -810,7 +857,10 @@ export function GitHubRepoImportWizard({
                           </div>
                         </div>
 
-                        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+                        <div
+                          ref={detailScrollRef}
+                          className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4"
+                        >
                           <div className="space-y-2">
                             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                               {t("marketplace.githubImportSkillDescription")}
@@ -835,7 +885,7 @@ export function GitHubRepoImportWizard({
                                 {t("marketplace.githubImportRootDirectory")}
                               </div>
                               <div className="mt-2 break-all text-sm">
-                                {selectedPreviewSkill.rootDirectory}
+                                {selectedPreviewSkill.rootDirectory || "."}
                               </div>
                             </div>
                           </div>
@@ -933,9 +983,19 @@ export function GitHubRepoImportWizard({
           ) : null}
         </div>
 
-        {preview ? (
+        {preview || importResult ? (
           <div className="shrink-0 border-t border-border/70 px-6 py-4">
-            {step !== "confirm" ? (
+            {step === "result" ? (
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleStartAnotherImport}>
+                  <RefreshCw className="size-4" />
+                  <span>{t("marketplace.githubImportResultActionRestart")}</span>
+                </Button>
+                <Button onClick={handleClose.bind(null, false)}>
+                  <span>{t("common.close")}</span>
+                </Button>
+              </div>
+            ) : step !== "confirm" ? (
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setStep("input")}>
                   <RefreshCw className="size-4" />

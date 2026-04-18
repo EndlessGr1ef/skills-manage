@@ -520,9 +520,10 @@ describe("MarketplaceView", () => {
       );
     });
     expect(await screen.findByText("twitterapi-io")).toBeInTheDocument();
+    expect(screen.getByTestId("github-import-repo-toolbar")).toBeInTheDocument();
     expect(screen.getByTestId("github-import-summary-list")).toBeInTheDocument();
     expect(screen.getByTestId("github-import-detail-pane")).toBeInTheDocument();
-    expect(screen.getByText(/Preview is read-only and performs no write/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Re-preview" })).toBeInTheDocument();
     expect(mockImportGitHubRepoSkills).not.toHaveBeenCalled();
   });
 
@@ -603,6 +604,120 @@ describe("MarketplaceView", () => {
     expect(content?.className).toContain("max-h-[min(92vh,32rem)]");
     expect(content?.className).toContain("w-[min(92vw,48rem)]");
     expect(content?.className).toContain("max-w-[min(92vw,48rem)]");
+  });
+
+  it("keeps the shared shell footer visible on preview and disables review when nothing is selected", async () => {
+    mockPreviewGitHubRepoImport.mockImplementation(async () => {
+      storeState.githubImport = {
+        isPreviewLoading: false,
+        isImporting: false,
+        preview: {
+          repo: {
+            owner: "anthropics",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/anthropics/skills",
+          },
+          skills: [
+            {
+              sourcePath: "skills/first/SKILL.md",
+              skillId: "first-skill",
+              skillName: "First Skill",
+              description: "First skill full description",
+              rootDirectory: "skills",
+              skillDirectoryName: "first",
+              downloadUrl: "https://example.com/first",
+              conflict: null,
+            },
+          ],
+        },
+        importResult: null,
+        previewedRepoUrl: "https://github.com/anthropics/skills",
+        error: null,
+      };
+    });
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import GitHub repo" }));
+    fireEvent.change(screen.getByLabelText("GitHub repository URL"), {
+      target: { value: "https://github.com/anthropics/skills" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+
+    await screen.findByText("First Skill");
+
+    const footerButton = screen.getByRole("button", { name: "Review import" });
+    expect(footerButton).toBeInTheDocument();
+    expect(footerButton.closest(".shrink-0")?.className).toContain("border-t");
+
+    fireEvent.click(screen.getAllByLabelText("Select skill")[0]);
+    expect(screen.getByRole("button", { name: "Review import" })).toBeDisabled();
+  });
+
+  it("resets the detail scroll position when switching active preview skills", async () => {
+    mockPreviewGitHubRepoImport.mockImplementation(async () => {
+      storeState.githubImport = {
+        isPreviewLoading: false,
+        isImporting: false,
+        preview: {
+          repo: {
+            owner: "anthropics",
+            repo: "skills",
+            branch: "main",
+            normalizedUrl: "https://github.com/anthropics/skills",
+          },
+          skills: [
+            {
+              sourcePath: "skills/first/SKILL.md",
+              skillId: "first-skill",
+              skillName: "First Skill",
+              description: "First skill full description",
+              rootDirectory: "skills",
+              skillDirectoryName: "first",
+              downloadUrl: "https://example.com/first",
+              conflict: null,
+            },
+            {
+              sourcePath: "skills/second/SKILL.md",
+              skillId: "second-skill",
+              skillName: "Second Skill",
+              description: "Second skill full description",
+              rootDirectory: "skills",
+              skillDirectoryName: "second",
+              downloadUrl: "https://example.com/second",
+              conflict: null,
+            },
+          ],
+        },
+        importResult: null,
+        previewedRepoUrl: "https://github.com/anthropics/skills",
+        error: null,
+      };
+    });
+
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    });
+
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import GitHub repo" }));
+    fireEvent.change(screen.getByLabelText("GitHub repository URL"), {
+      target: { value: "https://github.com/anthropics/skills" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+
+    await screen.findByText("First Skill");
+    scrollTo.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /Second Skill/i }));
+
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+    });
   });
 
   it("widens the preview step without returning to the oversized shell", async () => {
