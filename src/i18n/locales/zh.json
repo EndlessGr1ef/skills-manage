@@ -391,6 +391,7 @@
     "githubImportSecondaryCta": "从 GitHub 导入",
     "githubImportTitle": "GitHub 仓库导入",
     "githubImportDesc": "从 {{launcher}} 启动共享的 GitHub 仓库导入向导。",
+    "githubImportHeaderLauncher": "来自 {{launcher}}",
     "githubImportStep": {
       "input": "仓库地址",
       "preview": "预览",
@@ -413,6 +414,16 @@
     "githubImportRootDirectory": "仓库根目录",
     "githubImportSelectionToggle": "导入选择",
     "githubImportSelectCurrentSkill": "将当前技能纳入导入",
+    "githubImportDetailTabs": {
+      "overview": "概览",
+      "options": "导入选项",
+      "ai": "AI 导入摘要"
+    },
+    "githubImportAiSummaryTitle": "为什么值得导入",
+    "githubImportAiSummaryBody": "技能 {{name}} 已准备好导入。当前仓库摘要：{{description}}",
+    "githubImportAiSummaryFallback": "技能 {{name}} 可直接导入，但当前仓库预览还没有更多补充解释。",
+    "githubImportNoConflictTitle": "当前无需处理冲突",
+    "githubImportNoConflictBody": "这个技能可以沿用当前 id 直接导入；如果不想导入，也可以在这里取消选择。",
     "githubImportNoDescription": "该技能暂无描述。",
     "conflictDetected": "检测到冲突",
     "readyToImport": "可直接导入",
@@ -435,7 +446,7 @@
     },
     "githubImportReadyListTitle": "即将导入的技能",
     "githubImportReadyListDesc": "最后确认哪些技能会写入中央技能库。",
-    "githubImportConflictSummaryTitle": "冲突决策汇总",
+    "githubImportConflictSummaryTitle": "冲突选项",
     "githubImportDecisionNone": "这一组目前没有技能。",
     "githubImportConfirmCalmHint": "如果还想修改选择或冲突处理，先返回预览调整，再回来确认导入。",
     "resolveConflictsBeforeImport": "请先处理所有已选技能的冲突再继续导入。",

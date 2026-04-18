@@ -113,7 +113,7 @@ export function GitHubRepoImportWizard({
   const [selectionState, setSelectionState] = useState<Record<string, SelectionState>>({});
   const [postImportTargetSkillId, setPostImportTargetSkillId] = useState<string | null>(null);
   const [selectedSkillPath, setSelectedSkillPath] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<"overview" | "explanation" | "options">("overview");
+  const [detailTab, setDetailTab] = useState<"overview" | "ai" | "options">("overview");
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const browserMode = !isTauriRuntime();
 
@@ -940,7 +940,7 @@ export function GitHubRepoImportWizard({
                             {(
                               [
                                 ["overview", t("marketplace.githubImportDetailTabs.overview")],
-                                ["explanation", t("marketplace.githubImportDetailTabs.explanation")],
+                                ["ai", t("marketplace.githubImportDetailTabs.ai")],
                                 ["options", t("marketplace.githubImportDetailTabs.options")],
                               ] as const
                             ).map(([tabId, label]) => (
@@ -1003,10 +1003,10 @@ export function GitHubRepoImportWizard({
                             </div>
                           ) : null}
 
-                          {detailTab === "explanation" ? (
+                          {detailTab === "ai" ? (
                             <div
                               className="space-y-4"
-                              data-testid="github-import-detail-panel-explanation"
+                              data-testid="github-import-detail-panel-ai"
                             >
                               <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
                                 <div className="flex items-center gap-2 text-sm font-medium">

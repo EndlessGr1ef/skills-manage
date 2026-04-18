@@ -699,16 +699,18 @@ describe("MarketplaceView", () => {
     expect(screen.getByTestId("github-import-summary-list")).toBeInTheDocument();
     expect(screen.getByTestId("github-import-shell-footer")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("github-import-detail-tab-explanation"));
-    expect(screen.getByTestId("github-import-detail-panel-explanation")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("github-import-detail-tab-ai"));
+    expect(screen.getByTestId("github-import-detail-panel-ai")).toBeInTheDocument();
     expect(screen.queryByTestId("github-import-detail-panel-overview")).not.toBeInTheDocument();
     expect(screen.getByText(/Why this skill matters|为什么值得导入/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI import summary|AI 导入摘要/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("github-import-detail-tab-options"));
     expect(screen.getByTestId("github-import-detail-panel-options")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Overwrite" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Review import|检查导入内容/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /First Skill/i })).toBeInTheDocument();
+    expect(screen.getByText(/Conflict options|冲突选项/i)).toBeInTheDocument();
   });
 
   it("slims the github preview repo toolbar into a dense two-row summary", async () => {

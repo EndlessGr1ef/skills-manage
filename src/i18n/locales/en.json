@@ -391,6 +391,7 @@
     "githubImportSecondaryCta": "Import from GitHub",
     "githubImportTitle": "GitHub repo import",
     "githubImportDesc": "Launch the shared GitHub repo import wizard from {{launcher}}.",
+    "githubImportHeaderLauncher": "From {{launcher}}",
     "githubImportStep": {
       "input": "Repo URL",
       "preview": "Preview",
@@ -413,6 +414,16 @@
     "githubImportRootDirectory": "Repo root",
     "githubImportSelectionToggle": "Import selection",
     "githubImportSelectCurrentSkill": "Include this skill in the import",
+    "githubImportDetailTabs": {
+      "overview": "Overview",
+      "options": "Import options",
+      "ai": "AI import summary"
+    },
+    "githubImportAiSummaryTitle": "Why this skill matters",
+    "githubImportAiSummaryBody": "{{name}} appears ready to import. Current repo summary: {{description}}",
+    "githubImportAiSummaryFallback": "{{name}} is available for import, but this repo preview does not include extra explanation yet.",
+    "githubImportNoConflictTitle": "No conflict handling needed",
+    "githubImportNoConflictBody": "This skill can be imported directly with its current id unless you deselect it from the import.",
     "githubImportNoDescription": "No description provided for this skill.",
     "conflictDetected": "Conflict detected",
     "readyToImport": "Ready to import",
@@ -435,7 +446,7 @@
     },
     "githubImportReadyListTitle": "Ready to import",
     "githubImportReadyListDesc": "Final check of the skills that will be written into Central.",
-    "githubImportConflictSummaryTitle": "Decision summary",
+    "githubImportConflictSummaryTitle": "Conflict options",
     "githubImportDecisionNone": "No skills in this group.",
     "githubImportConfirmCalmHint": "Need to adjust selection or conflict decisions? Go back to Preview to edit before importing.",
     "resolveConflictsBeforeImport": "Resolve all selected conflicts before importing.",
