@@ -85,3 +85,12 @@ Actual preview/import assertions must be exercised on a real Tauri runtime. The 
 - Preview/import denial states must surface actionable guidance (rate limit / permission / auth) instead of only echoing a raw HTTP status.
 - This follow-up does **not** add GitHub PAT/settings support; keep the scope to clear feedback and safe no-write handling unless the user explicitly expands the mission.
 
+
+
+## Approved Adaptive Dialog Sizing
+
+- Do **not** keep one oversized shell for every wizard step.
+- The **input step** should use a medium-width centered dialog sized for the URL form only; it should not carry a giant empty preview body.
+- The **preview step** may widen to support the master/detail layout, but it should stop at a balanced split-view width rather than occupying an overgrown near-fullscreen shell.
+- Prefer step-dependent shell sizing over forcing the same width/height across input, preview, confirm, and result.
+- Preserve the current fixed header/footer and master/detail preview structure while recalibrating the shell size.
