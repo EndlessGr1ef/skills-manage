@@ -1,6 +1,6 @@
 {
   "milestone": "claude-platform-ux",
-  "round": 1,
+  "round": 2,
   "status": "fail",
   "validatorsRun": {
     "test": {
@@ -20,56 +20,35 @@
     }
   },
   "reviewsSummary": {
-    "total": 4,
-    "passed": 3,
+    "total": 2,
+    "passed": 1,
     "failed": 1,
     "failedFeatures": [
-      "claude-detail-read-only-source-ui"
+      "global-rescan-surface-regression-fix"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "claude-detail-read-only-source-ui",
+      "featureId": "global-rescan-surface-regression-fix",
       "severity": "blocking",
-      "description": "Duplicate Claude source rows still share AI explanation state and cache by logical `skillId` only. `SkillDetailView` reloads and refreshes explanations with `detailRequest.skillId`, while the store/backend explanation APIs and `skill_explanations` table also key by `skill_id` + `lang`, so opening the user copy after generating or caching an explanation for the marketplace copy can surface the wrong explanation instead of preserving source-specific detail state."
+      "description": "The command-palette action labeled \"Rescan all skills\" still does not run Discover's filesystem scan. `AppShell` now awaits `platformStore.rescan()` and then calls `discoverStore.refreshCounts()`, but `refreshCounts()` only reloads persisted `get_discovered_skills` rows while the real disk scan path remains `startScan()` / `start_project_scan`. Central reloads and the live Claude refresh were preserved, but Discover can still stay stale for new or removed project skills."
     }
   ],
   "appliedUpdates": [
     {
       "target": "library",
-      "description": "Updated `.factory/library/claude-source-aware-detail-api.md` to record that AI explanation caching remains keyed only by logical `skill_id` + `lang`, so duplicate Claude user/marketplace rows can leak explanation text across sources until the explanation surface becomes row-aware.",
-      "sourceFeature": "claude-detail-read-only-source-ui"
+      "description": "Updated `.factory/library/claude-source-aware-detail-api.md` to record that the Claude AI explanation surface is now row-aware, so duplicate `user` and `marketplace` rows keep explanation state separate by selected row identity.",
+      "sourceFeature": "claude-detail-explanation-row-awareness-fix"
     }
   ],
   "suggestedGuidanceUpdates": [
     {
       "target": ".factory/skills/claude-scan-frontend-worker/SKILL.md",
-      "suggestion": "When a feature claims that duplicate Claude row switching updates the full detail surface, explicitly require verification of the AI Explanation tab and any cached row-derived detail state in addition to metadata, markdown content, and management affordances.",
-      "evidence": "The blocking scrutiny failure for `claude-detail-read-only-source-ui` came from explanation state staying keyed only by logical `skillId`, while the current skill guidance and example handoff focus on metadata/content/action switching and never call out the explanation surface.",
-      "isSystemic": true
-    },
-    {
-      "target": ".factory/skills/claude-scan-frontend-worker/SKILL.md",
-      "suggestion": "Add a reusable macOS native Tauri validation recipe (isolated HOME launch, System Events/window inspection, screenshot capture, and current limitations) or a deterministic automation hook for duplicate-row flows so workers do not rediscover ad hoc native-validation steps each time.",
-      "evidence": "Three reviews in this scrutiny run (`claude-row-id-detail-compatibility-fix`, `claude-platform-list-source-aware-ui`, and `claude-platform-continuity-and-rescan`) independently reported that native Tauri proof still depends on ad hoc System Events / screenshot probing because the shared skill and mission library do not capture a stable recipe.",
-      "isSystemic": true
-    },
-    {
-      "target": "mission-worker-base",
-      "suggestion": "Clarify the clean-tree success checklist for mission-scoped work in already-dirty repositories: workers should leave unrelated changes untouched, verify scoped staged/committed files, and report the remaining pre-existing dirt explicitly instead of implying a globally clean repo is always achievable.",
-      "evidence": "The `claude-detail-read-only-source-ui` review noted that the worker had to explain the mismatch manually because mission guidance forbids cleaning unrelated dirty files, while shared worker-base expectations still read like a globally clean tree is required for success.",
+      "suggestion": "Add or point to a reproducible native Tauri automation recipe for command-palette/global-search flows (isolated HOME launch, accessibility steps, and evidence capture) so workers do not keep rediscovering ad hoc macOS automation for this surface.",
+      "evidence": "The `global-rescan-surface-regression-fix` review still found native verification relying on ad hoc accessibility scripting, while the current worker skill says `.factory/library/user-testing.md` is the canonical recipe even though that library entry does not yet cover command-palette/global-search interaction details.",
       "isSystemic": true
     }
   ],
-  "rejectedObservations": [
-    {
-      "observation": "The list UI added `t(..., { defaultValue })` source/read-only labels without new locale JSON keys.",
-      "reason": "ambiguous: project guidance requires user-visible text to go through i18n, but it does not clearly state whether `t()` with `defaultValue` is acceptable without dedicated `en.json` / `zh.json` entries."
-    },
-    {
-      "observation": "`.factory/services.yaml`'s shared `test-frontend-targeted` command no longer covers the full Claude platform UX frontend regression surface after `SkillDetailDrawer.test.tsx` and `AppShell.test.tsx` were added.",
-      "reason": "ambiguous: the command name is already referenced by worker skills, and validator-side additive changes cannot safely decide whether the shared default should be replaced or supplemented without orchestrator direction."
-    }
-  ],
-  "previousRound": null
+  "rejectedObservations": [],
+  "previousRound": ".factory/validation/claude-platform-ux/scrutiny/synthesis.round1.json"
 }
