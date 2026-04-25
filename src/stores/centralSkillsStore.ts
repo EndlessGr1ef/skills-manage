@@ -66,6 +66,7 @@ interface CentralSkillsState {
     agentIds: string[],
     method: string
   ) => Promise<BatchInstallResult>;
+  importToCentral: (skillId: string) => Promise<void>;
   togglePlatformLink: (skillId: string, agentId: string) => Promise<void>;
 }
 
@@ -122,6 +123,22 @@ export const useCentralSkillsStore = create<CentralSkillsState>((set, get) => ({
       set({ skills, isInstalling: false });
 
       return result;
+    } catch (err) {
+      set({ error: String(err), isInstalling: false });
+      throw err;
+    }
+  },
+
+  /**
+   * Import a skill to the central skills directory.
+   * Used when a skill exists in a custom scan directory but is not yet centralized.
+   */
+  importToCentral: async (skillId) => {
+    set({ isInstalling: true, error: null });
+    try {
+      await invoke("import_skill_to_central", { skillId });
+      const skills = await invoke<SkillWithLinks[]>("get_central_skills");
+      set({ skills, isInstalling: false });
     } catch (err) {
       set({ error: String(err), isInstalling: false });
       throw err;

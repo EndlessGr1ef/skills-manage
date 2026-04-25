@@ -3,8 +3,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::commands::discover::ImportResult;
 use crate::db::{self, DbPool, SkillInstallation};
+use crate::path_utils::central_skills_dir;
 use crate::AppState;
+use super::scanner::parse_skill_md;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -473,6 +476,62 @@ pub async fn uninstall_skill_from_agent(
     agent_id: String,
 ) -> Result<(), String> {
     uninstall_skill_from_agent_impl(&state.db, &skill_id, &agent_id).await
+}
+
+/// Core import-to-central logic — copies a skill from its current location
+/// to the central skills directory and updates the database.
+pub async fn import_skill_to_central_impl(pool: &DbPool, skill_id: &str) -> Result<ImportResult, String> {
+    let skill = db::get_skill_by_id(pool, skill_id)
+        .await?
+        .ok_or_else(|| format!("Skill '{}' not found", skill_id))?;
+
+    let central_dir = central_skills_dir();
+    let target_dir = central_dir.join(&skill.id);
+
+    if target_dir.exists() {
+        return Err(format!("Skill '{}' already exists in central skills", skill.id));
+    }
+
+    let src_dir = Path::new(&skill.file_path)
+        .parent()
+        .ok_or_else(|| "Cannot determine skill directory".to_string())?;
+
+    copy_dir_all(src_dir, &target_dir)?;
+
+    let skill_md_path = target_dir.join("SKILL.md");
+    let info = parse_skill_md(&skill_md_path);
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let (name, description) = info
+        .map(|i| (i.name, i.description))
+        .unwrap_or_else(|| (skill.name.clone(), skill.description.clone()));
+
+    let db_skill = db::Skill {
+        id: skill.id.clone(),
+        name,
+        description,
+        file_path: skill_md_path.to_string_lossy().into_owned(),
+        canonical_path: Some(target_dir.to_string_lossy().into_owned()),
+        is_central: true,
+        source: Some("copy".to_string()),
+        content: None,
+        scanned_at: now,
+    };
+    db::upsert_skill(pool, &db_skill).await?;
+
+    Ok(ImportResult {
+        skill_id: skill.id.clone(),
+        target: "central".to_string(),
+    })
+}
+
+/// Tauri command: import an existing skill to the central skills directory.
+#[tauri::command]
+pub async fn import_skill_to_central(
+    state: State<'_, AppState>,
+    skill_id: String,
+) -> Result<ImportResult, String> {
+    import_skill_to_central_impl(&state.db, &skill_id).await
 }
 
 /// Tauri command: install a skill to multiple agents in one call.

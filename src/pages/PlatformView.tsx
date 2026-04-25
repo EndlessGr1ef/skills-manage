@@ -29,6 +29,9 @@ function EmptyState({ message }: { message: string }) {
 }
 
 type ClaudeSourceFilter = "all" | "user" | "plugin";
+type InstallTargetSkill = Pick<SkillWithLinks, "id" | "name" | "linked_agents"> & {
+  description?: string;
+};
 
 // ─── PlatformView ─────────────────────────────────────────────────────────────
 
@@ -45,14 +48,14 @@ export function PlatformView() {
   const uninstallSkillFromAgent = useSkillStore((state) => state.uninstallSkillFromAgent);
 
   const centralSkills = useCentralSkillsStore((state) => state.skills);
-  const centralAgents = useCentralSkillsStore((state) => state.agents);
   const loadCentralSkills = useCentralSkillsStore((state) => state.loadCentralSkills);
   const installSkill = useCentralSkillsStore((state) => state.installSkill);
+  const importToCentral = useCentralSkillsStore((state) => state.importToCentral);
   const refreshCounts = usePlatformStore((state) => state.refreshCounts);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<ClaudeSourceFilter>("all");
-  const [installTargetSkill, setInstallTargetSkill] = useState<SkillWithLinks | null>(null);
+  const [installTargetSkill, setInstallTargetSkill] = useState<InstallTargetSkill | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [drawerSkill, setDrawerSkill] = useState<ScannedSkill | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -83,19 +86,22 @@ export function PlatformView() {
     setSourceFilter("all");
   }, [agentId]);
 
-  // Ensure central skills are loaded so we can resolve SkillWithLinks for InstallDialog.
+  // Ensure central skills are loaded so we can resolve already-linked platforms.
   useEffect(() => {
     if (centralSkills.length === 0) {
       loadCentralSkills();
     }
   }, [centralSkills.length, loadCentralSkills]);
 
-  function handleInstallClick(skillId: string) {
-    const target = centralSkills.find((s) => s.id === skillId);
-    if (!target) {
-      toast.error(t("central.installError", { error: t("platform.notFound") }));
-      return;
-    }
+  function handleInstallClick(skill: ScannedSkill) {
+    const target: InstallTargetSkill =
+      centralSkills.find((centralSkill) => centralSkill.id === skill.id) ?? {
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        linked_agents: agentId ? [agentId] : [],
+      };
+
     setInstallTargetSkill(target);
     setIsDialogOpen(true);
   }
@@ -123,6 +129,19 @@ export function PlatformView() {
       await refreshCounts();
     } catch (err) {
       toast.error(t("detail.uninstallError", { error: String(err) }));
+    }
+  }
+
+  async function handleImportToCentral(skill: ScannedSkill) {
+    try {
+      await importToCentral(skill.id);
+      await refreshCounts();
+      if (agentId) {
+        await getSkillsByAgent(agentId);
+      }
+      toast.success(t("discover.importSuccess"));
+    } catch (err) {
+      toast.error(t("discover.importError", { error: String(err) }));
     }
   }
 
@@ -322,6 +341,7 @@ export function PlatformView() {
                 sourceType={skill.link_type as "symlink" | "copy" | "native"}
                 originKind={skill.source_kind ?? null}
                 isReadOnly={skill.is_read_only ?? false}
+                isCentral={skill.is_central}
                 isLoading={
                   agentId
                     ? (pendingSkillActionKeys[`${agentId}::${skill.id}`] ?? false)
@@ -331,7 +351,12 @@ export function PlatformView() {
                 onInstallTo={
                   skill.is_read_only
                     ? undefined
-                    : () => handleInstallClick(skill.id)
+                    : () => handleInstallClick(skill)
+                }
+                onInstallToCentral={
+                  !skill.is_central && !skill.is_read_only
+                    ? () => handleImportToCentral(skill)
+                    : undefined
                 }
                 onUninstallFromPlatform={
                   skill.is_read_only
@@ -357,7 +382,7 @@ export function PlatformView() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         skill={installTargetSkill}
-        agents={centralAgents}
+        agents={agents}
         onInstall={handleInstall}
       />
 

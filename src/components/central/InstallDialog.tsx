@@ -21,10 +21,14 @@ import { AgentWithStatus, SkillWithLinks } from "@/types";
 
 export type InstallMethod = "symlink" | "copy";
 
+type InstallTargetSkill = Pick<SkillWithLinks, "id" | "name" | "linked_agents"> & {
+  description?: string;
+};
+
 interface InstallDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  skill: SkillWithLinks | null;
+  skill: InstallTargetSkill | null;
   /** All agents (the 'central' agent will be filtered out). */
   agents: AgentWithStatus[];
   onInstall: (skillId: string, agentIds: string[], method: InstallMethod) => Promise<void>;

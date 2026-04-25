@@ -240,6 +240,7 @@ const mockClaudePluginSliceDuplicates: ScannedSkill[] = [
 const mockGetSkillsByAgent = vi.fn();
 const mockLoadCentralSkills = vi.fn();
 const mockInstallSkill = vi.fn();
+const mockImportToCentral = vi.fn();
 const mockUninstallSkillFromAgent = vi.fn();
 const mockRefreshCounts = vi.fn();
 const mockUsePlatformStore = vi.mocked(usePlatformStore);
@@ -279,6 +280,7 @@ function buildCentralSkillsStoreState(overrides = {}) {
     agents: [mockAgent],
     loadCentralSkills: mockLoadCentralSkills,
     installSkill: mockInstallSkill,
+    importToCentral: mockImportToCentral,
     ...overrides,
   };
 }
@@ -618,6 +620,39 @@ describe("PlatformView", () => {
     expect(
       screen.getByRole("button", { name: /从 Claude Code 卸载 code-reviewer/i })
     ).toBeInTheDocument();
+  });
+
+  it("opens install dialog for non-central scanned skills using current platform fallback", async () => {
+    renderPlatformView();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /将 code-reviewer 安装到平台/i })
+    );
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("安装 code-reviewer")).toBeInTheDocument();
+    expect(screen.getByText("已链接")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /安装到 1 个平台/i })
+    ).toBeInTheDocument();
+    expect(mockInstallSkill).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mockLoadCentralSkills).toHaveBeenCalled();
+    });
+  });
+
+  it("shows import-to-central button for non-central platform skills", async () => {
+    renderPlatformView();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /安装到中央/i })
+    );
+
+    await waitFor(() => {
+      expect(mockImportToCentral).toHaveBeenCalledWith("code-reviewer");
+    });
+    expect(mockRefreshCounts).toHaveBeenCalledTimes(1);
   });
 
   it("uninstalls a skill from the current platform and refreshes counts", async () => {
