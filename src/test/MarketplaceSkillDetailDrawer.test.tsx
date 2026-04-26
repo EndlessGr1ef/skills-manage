@@ -33,6 +33,16 @@ const skill = {
   installed: false,
 };
 
+const skillWithFiles = {
+  ...skill,
+  id: "skill-2",
+  name: "file-tree-skill",
+  files: [
+    { name: "scripts", path: "skills/file-tree-skill/scripts", is_dir: true },
+    { name: "helper.ts", path: "skills/file-tree-skill/scripts/helper.ts", is_dir: false },
+  ],
+};
+
 const mockContent = `---
 name: baoyu-imagine
 version: 1.57.0
@@ -51,6 +61,7 @@ Body content.`;
 describe("MarketplaceSkillDetailDrawer", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -105,5 +116,28 @@ describe("MarketplaceSkillDetailDrawer", () => {
       expect(screen.getByText(/name: baoyu-imagine/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/---/)).toBeInTheDocument();
+  });
+
+  it("renders marketplace file entries as non-interactive when no file selection handler exists", async () => {
+    render(
+      <MarketplaceSkillDetailDrawer
+        open
+        skill={skillWithFiles}
+        onOpenChange={vi.fn()}
+        onInstall={vi.fn()}
+        isInstalling={false}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Files \(2\)/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "scripts" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("helper.ts")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: "helper.ts" })).not.toBeInTheDocument();
   });
 });

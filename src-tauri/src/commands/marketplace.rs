@@ -643,6 +643,25 @@ pub async fn search_skills_sh(
 /// one of these paths.  Everything else falls through to the tree API.
 const COMMON_SKILL_PREFIXES: &[&str] = &["", "skills/"];
 
+/// Find the repo-relative path to a skill directory in a downloaded snapshot
+/// by matching the last directory component against skill_id.
+fn find_skill_path_in_snapshot(
+    snapshot: &github_import::GitHubRepoSnapshot,
+    skill_id: &str,
+) -> Option<String> {
+    for path in snapshot.files.keys() {
+        let p = std::path::Path::new(path);
+        if p.file_name().and_then(|n| n.to_str()) != Some("SKILL.md") {
+            continue;
+        }
+        let parent = p.parent().unwrap_or(std::path::Path::new(""));
+        if parent.file_name().and_then(|n| n.to_str()) == Some(skill_id) {
+            return Some(parent.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
 /// Try to find SKILL.md in a repo.
 ///
 /// Strategy (2 phases, max 3 HTTP calls):
@@ -661,14 +680,17 @@ async fn find_skill_md_url(
     let futs: Vec<_> = COMMON_SKILL_PREFIXES
         .iter()
         .map(|prefix| {
+            let path = format!("{}{}", prefix, skill_id);
             let url = format!(
-                "https://raw.githubusercontent.com/{}/{}/{}{}/SKILL.md",
-                owner, repo, branch, prefix
+                "https://raw.githubusercontent.com/{}/{}/{}/{}",
+                owner, repo, branch, path
             );
-            async {
-                let resp = client.get(&url).send().await.ok()?;
+            // Try {prefix}{skill_id}/SKILL.md
+            let skill_md_url = format!("{}/SKILL.md", url);
+            async move {
+                let resp = client.get(&skill_md_url).send().await.ok()?;
                 if resp.status().is_success() {
-                    Some(url)
+                    Some(skill_md_url)
                 } else {
                     None
                 }
@@ -846,52 +868,59 @@ pub async fn install_from_skills_sh(
     let repo_url = format!("https://github.com/{}", source);
     let auth_str = github_import::github_direct_auth_from_settings(&state.db).await?;
     let auth = auth_str.as_deref();
-    let repo = github_import::resolve_repo_ref(&repo_url, auth).await?;
+    let repo = match github_import::resolve_repo_ref(&repo_url, auth).await {
+        Ok(r) => r,
+        Err(e) if auth.is_some() => github_import::resolve_repo_ref(&repo_url, None)
+            .await
+            .map_err(|_| e)?,
+        Err(e) => return Err(e),
+    };
 
     let client = reqwest::Client::builder()
         .user_agent("skills-manage/0.9.1")
         .build()
         .map_err(|e| e.to_string())?;
 
-    // Use user's GitHub token for tree search (raw.githubusercontent.com doesn't need auth)
-    let md_url = find_skill_md_url(
-        &client,
-        &repo.owner,
-        &repo.repo,
-        &repo.branch,
-        &skill_id,
-        auth,
-    )
-    .await?;
+    // Download full repo snapshot (tarball) and find the skill directory
+    let snapshot = github_import::download_repo_snapshot(&client, &repo, auth).await?;
 
-    let resp = client
-        .get(&md_url)
-        .send()
-        .await
-        .map_err(|e| format!("Download failed: {}", e))?;
+    // Find the skill directory by matching the last directory component against skill_id
+    let source_path = find_skill_path_in_snapshot(&snapshot, &skill_id).ok_or_else(|| {
+        format!(
+            "Could not find skill '{}' in repository '{}'",
+            skill_id, source
+        )
+    })?;
 
-    if !resp.status().is_success() {
-        return Err(format!("Download returned {}", resp.status()));
-    }
-
-    let content = resp
-        .text()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    let frontmatter = github_import::parse_frontmatter(&content)
+    // Read and parse SKILL.md from the snapshot
+    let skill_md_path_in_repo = format!("{}/SKILL.md", source_path);
+    let raw_content = snapshot.files.get(&skill_md_path_in_repo).ok_or_else(|| {
+        format!(
+            "SKILL.md not found at '{}' in snapshot",
+            skill_md_path_in_repo
+        )
+    })?;
+    let content_str =
+        std::str::from_utf8(raw_content).map_err(|_| "SKILL.md is not valid UTF-8.".to_string())?;
+    let frontmatter = github_import::parse_frontmatter(content_str)
         .ok_or_else(|| "Skill is missing valid frontmatter.".to_string())?;
 
     let skill_name = frontmatter.name;
 
-    // Write to central
+    // Collect all files from the skill directory and write them to central dir
+    let source_files = github_import::collect_snapshot_source_files(&snapshot, &source_path)?;
     let skill_dir = central_skills_dir().join(&skill_name);
-    std::fs::create_dir_all(&skill_dir)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
+    let mut progress_state = github_import::GitHubImportProgressState::default();
+    github_import::write_snapshot_source_to_target(
+        &snapshot,
+        &source_files,
+        &skill_dir,
+        &source_path,
+        &mut progress_state,
+        None,
+    )?;
 
     let skill_md_path = skill_dir.join("SKILL.md");
-    std::fs::write(&skill_md_path, &content)
-        .map_err(|e| format!("Failed to write SKILL.md: {}", e))?;
 
     // Upsert to DB
     let db_skill = crate::db::Skill {
